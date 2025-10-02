@@ -1,66 +1,59 @@
+// main.js (ESM)
+
+console.log('--- main start ---');
+
 const worker = new Worker('./js/worker.js', { type: 'module' });
-
-//console.log(worker)
-//console.log(self)
-
-
-
-// リクエスト管理用
-let nextId = 1;
-const pending = new Map();
 
 // Worker からのメッセージを受け取る
 worker.onmessage = (ev) => {
-  const msg = JSON.parse(ev.data);
-  console.log(msg)
-  if (msg.method === "log") {
-    console.log(msg.params); // => [worker] didOpen: file:///main.ts
+  let msg = ev.data;
+  try { msg = JSON.parse(msg); } catch {}
+
+  // Worker 側ログ転送
+  if (msg.method === 'log') {
+    console.log(msg.params); // eruda にも表示される
     return;
   }
-  // 通常の JSON-RPC 応答処理 ...
-  if (msg.id && pending.has(msg.id)) {
-    const { resolve, reject } = pending.get(msg.id);
-    pending.delete(msg.id);
-    if (msg.error) reject(msg.error);
-    else resolve(msg.result);
-  } else {
-    console.log('[notify from worker]', msg);
+
+  // JSON-RPC 応答
+  if (msg.jsonrpc === '2.0') {
+    if (msg.result !== undefined) {
+      console.log('RPC result:', msg.result);
+    } else if (msg.error) {
+      console.error('RPC error:', msg.error);
+    }
+    return;
   }
+
+  console.log('Other message:', msg);
 };
 
-// JSON-RPC リクエスト送信
+// JSON-RPC リクエスト送信 helper
+let nextId = 1;
 function rpcRequest(method, params) {
   return new Promise((resolve, reject) => {
     const id = nextId++;
-    pending.set(id, { resolve, reject });
-    worker.postMessage(JSON.stringify({
-      jsonrpc: '2.0',
-      id,
-      method,
-      params
-    }));
+    const listener = (ev) => {
+      let msg = ev.data;
+      try { msg = JSON.parse(msg); } catch {}
+      if (msg.jsonrpc === '2.0' && msg.id === id) {
+        worker.removeEventListener('message', listener);
+        if (msg.error) reject(msg.error);
+        else resolve(msg.result);
+      }
+    };
+    worker.addEventListener('message', listener);
+    worker.postMessage(JSON.stringify({ jsonrpc: '2.0', id, method, params }));
   });
 }
 
-// JSON-RPC 通知送信
-function rpcNotify(method, params) {
-  console.log('rpcNotify');
-  worker.postMessage(JSON.stringify({
-    jsonrpc: '2.0',
-    method,
-    params
-  }));
-}
-
-// 実行例
+// didOpen → ping
 (async () => {
-  console.log('--- main start ---');
+  await rpcRequest('textDocument/didOpen', {
+    textDocument: { uri: 'file:///main.ts', languageId: 'typescript', version: 1, text: 'const a = 1;' }
+  });
 
-  // 通知(返答なし)
-  rpcNotify('textDocument/didOpen', { uri: 'file:///main.ts' });
-
-  // リクエスト(返答あり)
-  const res = await rpcRequest('ping', { msg: 'hello from main' });
+  const res = await rpcRequest('ping', { text: 'hello from main' });
   console.log('ping result:', res);
 
   console.log('--- done ---');

@@ -1,95 +1,47 @@
-/*
-const respond = (id, result) => {
+// ts-worker.js (module Worker)
+
+// console.log を main に転送する
+function sendLog(...args) {
   self.postMessage(JSON.stringify({
-    jsonrpc: '2.0',
-    id,
-    result,
+    method: 'log',
+    params: args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ')
   }));
 }
+console.log = (...args) => sendLog(...args);
 
-const respondError = (id, error) => {
-  self.postMessage(JSON.stringify({
-    jsonrpc: '2.0',
-    id,
-    error
-  }));
+// JSON-RPC 応答 helper
+function sendResult(id, result) {
+  self.postMessage(JSON.stringify({ jsonrpc: '2.0', id, result }));
+}
+function sendError(id, error) {
+  self.postMessage(JSON.stringify({ jsonrpc: '2.0', id, error }));
 }
 
-const handleRequest = (msg) => {
-  msg.method === 'ping' ? respond(msg.id, { echoed: msg.params.msg, }) : respondError(msg.id, { code: -32601, message: 'Method not found', });
-}
+// JSON-RPC dispatcher
+async function handleMessage(msg) {
+  const { id, method, params } = msg;
 
-const handleNotify = (msg) => {
-  msg.method === 'textDocument/didOpen' ? console.log(`[worker] didOpen: ${msg.params.uri}`) : console.log(`[worker] notify: ${msg}`);
-}
-
-
-self.addEventListener('message', (event) => {
-  const msg = JSON.parse(event.data);
-  msg.id ? handleRequest(msg) : handleNotify(msg);
-});
-*/
-
-/*
-self.onmessage = (ev) => {
-  const msg = JSON.parse(ev.data);
-
-  if (msg.id) {
-    // リクエスト
-    handleRequest(msg);
-  } else {
-    // 通知
-    handleNotify(msg);
+  if (method === 'ping') {
+    sendResult(id, { echoed: params.text });
+    return;
   }
-}
-*/
 
-// worker.js
-// JSON-RPC っぽい受け取り方をする Worker 側実装
+  if (method === 'textDocument/didOpen') {
+    const uri = params?.textDocument?.uri;
+    console.log('[worker] didOpen:', uri);
+    return;
+  }
+
+  sendError(id, { code: -32601, message: 'Method not found: ' + method });
+}
 
 self.onmessage = (ev) => {
-  const msg = JSON.parse(ev.data);
-  if (msg.id) {
-    // リクエスト
-    handleRequest(msg);
-  } else {
-    // 通知
-    handleNotify(msg);
+  let obj;
+  try { obj = JSON.parse(ev.data); } catch (e) {
+    sendError(null, { code: -32700, message: 'Parse error' });
+    return;
   }
+  handleMessage(obj).catch(err => {
+    sendError(obj.id ?? null, { code: -32000, message: String(err) });
+  });
 };
-
-function handleRequest(msg) {
-  if (msg.method === 'ping') {
-    respond(msg.id, { echoed: msg.params.msg });
-  } else {
-    respondError(msg.id, { code: -32601, message: 'Method not found' });
-  }
-}
-
-function handleNotify(msg) {
-  /*
-  if (msg.method === 'textDocument/didOpen') {
-    console.log('[worker] didOpen:', msg.params.uri);
-  } else {
-    console.log('[worker] notify:', msg);
-  }
-  */
-}
-
-function respond(id, result) {
-  self.postMessage(JSON.stringify({
-    jsonrpc: '2.0',
-    id,
-    result
-  }));
-}
-
-function respondError(id, error) {
-  self.postMessage(JSON.stringify({
-    jsonrpc: '2.0',
-    id,
-    error
-  }));
-}
-
-
