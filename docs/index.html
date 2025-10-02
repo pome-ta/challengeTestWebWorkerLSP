@@ -27,5 +27,22 @@
 
     <title>Web Worker LSP</title>
   </head>
-  <body></body>
+  
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; padding: 16px; }
+    #log { white-space: pre-wrap; font-family: monospace; background:#f8f8f8; border:1px solid #ddd; padding:12px; border-radius:6px; height:360px; overflow:auto; }
+    button { margin-right:8px; }
+  </style>
+</head>
+<body>
+  <h1>TypeScript VFS in Worker — Minimal LSP-like</h1>
+  <p>Worker に <code>@typescript/vfs</code> を載せ、補完/診断を返す最小デモ。</p>
+
+  <div>
+    <button id="btn-init">initialize + didOpen + diagnostics + completion を実行</button>
+  </div>
+
+  <h3>ログ</h3>
+  <div id="log"></div>
+  </body>
 </html>
