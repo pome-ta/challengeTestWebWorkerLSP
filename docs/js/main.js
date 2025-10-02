@@ -29,7 +29,7 @@ worker.addEventListener('message', (ev) => {
 
   // Worker ログ転送(method: "log")を優先して扱う
   if (msg?.method === 'log' && msg?.params !== undefined) {
-    log('[worker]', msg.params);
+    log('[worker a]', msg.params);
     return;
   }
 

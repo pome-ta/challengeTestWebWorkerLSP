@@ -16,7 +16,7 @@ function sendLog(...args) {
   self.postMessage(JSON.stringify({ method: 'log', params: msg }));
 }
 // override console.log して開発時のログを main に出す(eruda や main の console で見える)
-console.log = (...args) => sendLog('[worker]', ...args);
+console.log = (...args) => sendLog('[worker b]', ...args);
 
 // --- send helpers (JSON-RPC 風で文字列を送る) ---
 function sendResponse(id, result) {
