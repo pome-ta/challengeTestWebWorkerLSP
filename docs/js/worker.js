@@ -4,9 +4,8 @@
 //  - メッセージのやり取りはすべて JSON.stringify/parse した文字列で行う(LSP に近い流儀)
 
 
-//import {* as vfs} from '@typescript/vfs';
-import tsModule  from 'typescript';
-
+import * as vfs from '@typescript/vfs';
+import {default as tsModule}  from 'typescript';
 // モジュールレベルの状態
 let env = null;            // createVirtualTypeScriptEnvironment が返す環境
 //let tsModule = null;       // typescript モジュール参照
@@ -41,7 +40,7 @@ async function boot() {
   if (initialized) return;
   // 動的 import: CDN (esm.sh) から読み込む(初回はネットワークアクセスあり)
   // 注意: URL は必要に応じてバージョン固定してください(安定化のため)。
-  const vfs = await import('https://esm.sh/@typescript/vfs');
+  //const vfs = await import('https://esm.sh/@typescript/vfs');
   //tsModule = await import('https://esm.sh/typescript');
 
   // createDefaultMapFromCDN に TypeScript を渡して lib ファイルを取得
