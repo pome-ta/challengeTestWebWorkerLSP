@@ -132,4 +132,4 @@ async function runDemo() {
 document.getElementById('btn-init').addEventListener('click', runDemo);
 
 // (自動実行したければ次の行のコメントを外す)
-// runDemo();
+runDemo();

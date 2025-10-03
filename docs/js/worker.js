@@ -4,8 +4,8 @@
 //  - メッセージのやり取りはすべて JSON.stringify/parse した文字列で行う(LSP に近い流儀)
 
 
-import * as vfs from '@typescript/vfs';
-import {default as tsModule}  from 'typescript';
+import * as vfs from 'https://esm.sh/@typescript/vfs';
+import {default as tsModule}  from 'https://esm.sh/typescript';
 // モジュールレベルの状態
 let env = null;            // createVirtualTypeScriptEnvironment が返す環境
 //let tsModule = null;       // typescript モジュール参照
