@@ -3,9 +3,13 @@
 //  - 内部で @typescript/vfs と typescript を CDN から動的 import して初期化する
 //  - メッセージのやり取りはすべて JSON.stringify/parse した文字列で行う(LSP に近い流儀)
 
+
+//import {* as vfs} from '@typescript/vfs';
+import tsModule  from 'typescript';
+
 // モジュールレベルの状態
 let env = null;            // createVirtualTypeScriptEnvironment が返す環境
-let tsModule = null;       // typescript モジュール参照
+//let tsModule = null;       // typescript モジュール参照
 let initialized = false;   // boot 実行済フラグ
 const fileContents = new Map(); // path -> text
 
@@ -17,6 +21,8 @@ function sendLog(...args) {
 }
 // override console.log して開発時のログを main に出す(eruda や main の console で見える)
 console.log = (...args) => sendLog('[worker b]', ...args);
+
+//console.log(vfs)
 
 // --- send helpers (JSON-RPC 風で文字列を送る) ---
 function sendResponse(id, result) {
@@ -36,7 +42,7 @@ async function boot() {
   // 動的 import: CDN (esm.sh) から読み込む(初回はネットワークアクセスあり)
   // 注意: URL は必要に応じてバージョン固定してください(安定化のため)。
   const vfs = await import('https://esm.sh/@typescript/vfs');
-  tsModule = await import('https://esm.sh/typescript');
+  //tsModule = await import('https://esm.sh/typescript');
 
   // createDefaultMapFromCDN に TypeScript を渡して lib ファイルを取得
   const defaultMap = await vfs.createDefaultMapFromCDN({ target: tsModule.ScriptTarget.ES2022 }, tsModule.version, false, tsModule);
