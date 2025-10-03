@@ -15,7 +15,12 @@ function log(...args) {
 
 // Worker を起動(module Worker)
 const worker = new Worker('./js/worker.js', { type: 'module' });
+worker.onmessage = (ev) => {
+  console.log('[main] got:', ev.data);
+};
 
+// boot 要求
+worker.postMessage('boot');
 // JSON-RPC クライアント実装(シンプル)
 let nextId = 1;
 const pending = new Map(); // id -> {resolve, reject}
@@ -132,4 +137,4 @@ async function runDemo() {
 document.getElementById('btn-init').addEventListener('click', runDemo);
 
 // (自動実行したければ次の行のコメントを外す)
-runDemo();
+//runDemo();

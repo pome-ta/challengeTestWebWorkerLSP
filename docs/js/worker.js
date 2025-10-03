@@ -54,6 +54,13 @@ async function boot() {
   console.log('vfs boot completed. TypeScript version:', tsModule.version);
 }
 
+self.onmessage = async (ev) => {
+  if (ev.data === 'boot') {
+    await boot();
+    self.postMessage('booted');
+  }
+};
+
 /* -------------------- ヘルパー -------------------- */
 
 function uriToPath(uri) {
