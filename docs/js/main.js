@@ -6,14 +6,18 @@ const pending = new Map();
 
 worker.onmessage = (ev) => {
   const msg = JSON.parse(ev.data);
+
+  if (msg.__workerLog) {
+    // Worker の console.log を main 側へリダイレクト
+    console.log('[worker]', ...msg.args);
+    return;
+  }
+
   if (msg.id && pending.has(msg.id)) {
     pending.get(msg.id)(msg);
     pending.delete(msg.id);
-  } else if (msg.method === 'log') {
-    // Worker からの console.log をエミュレート
-    console.log('[worker]', ...msg.params);
   } else {
-    console.log('[main notify]', msg);
+    console.log('[worker raw]', msg);
   }
 };
 
@@ -35,4 +39,3 @@ function sendRequest(method, params = {}) {
   console.log('initialize result:', initResult);
   console.log('--- done ---');
 })();
-

@@ -1,18 +1,28 @@
 // worker.js
+function setupConsoleRedirect() {
+  const origLog = console.log;
+  console.log = (...args) => {
+    try {
+      self.postMessage(JSON.stringify({ __workerLog: true, args }));
+    } catch {
+      origLog(...args);
+    }
+  };
+}
+setupConsoleRedirect();
+
+console.log('[worker] console redirected OK');
+
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
 
-/** 
- * Worker 側の console.log をメインスレッドへ送信するラッパー
- * これで eruda からも Worker 内ログを確認できる
- */
-function log(...args) {
-  self.postMessage(JSON.stringify({
-    jsonrpc: '2.0',
-    method: 'log',
-    params: args.map(String),
-  }));
-}
+// worker.js
+import * as vfs from 'https://esm.sh/@typescript/vfs';
+import ts from 'https://esm.sh/typescript';
+
+// worker.js
+import * as vfs from 'https://esm.sh/@typescript/vfs';
+import ts from 'https://esm.sh/typescript';
 
 class LSPWorker {
   constructor() {
@@ -50,7 +60,7 @@ class LSPWorker {
   }
 
   handleNotify(msg) {
-    log('[worker notify]', msg.method, msg.params);
+    console.log('[worker notify]', msg.method, msg.params);
   }
 
   async bootVfs() {
@@ -67,7 +77,7 @@ class LSPWorker {
     this.fsMap = fsMap;
     this.system = system;
     this.env = env;
-    log('[worker] vfs boot completed. TypeScript version:', ts.version);
+    console.log('[worker] vfs boot completed. TypeScript version:', ts.version);
   }
 
   respond(id, result) {
