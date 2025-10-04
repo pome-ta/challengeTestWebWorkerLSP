@@ -1,16 +1,38 @@
-// main.js (ブラウザ側)
-
+// main.js
 const worker = new Worker('./js/worker.js', { type: 'module' });
 
+let nextId = 1;
+const pending = new Map();
+
 worker.onmessage = (ev) => {
-  console.log('[main] got:', ev.data);
+  const msg = JSON.parse(ev.data);
+  if (msg.id && pending.has(msg.id)) {
+    pending.get(msg.id)(msg);
+    pending.delete(msg.id);
+  } else if (msg.method === 'log') {
+    // Worker からの console.log をエミュレート
+    console.log('[worker]', ...msg.params);
+  } else {
+    console.log('[main notify]', msg);
+  }
 };
 
-// initialize リクエスト送信
-worker.postMessage(JSON.stringify({
-  jsonrpc: '2.0',
-  id: 1,
-  method: 'initialize',
-  params: {}
-}));
+function sendRequest(method, params = {}) {
+  return new Promise((resolve) => {
+    const id = nextId++;
+    pending.set(id, resolve);
+    worker.postMessage(JSON.stringify({ jsonrpc: '2.0', id, method, params }));
+  });
+}
+
+(async () => {
+  console.log('--- main start ---');
+  const initResult = await sendRequest('initialize', {
+    processId: null,
+    rootUri: null,
+    capabilities: {},
+  });
+  console.log('initialize result:', initResult);
+  console.log('--- done ---');
+})();
 
