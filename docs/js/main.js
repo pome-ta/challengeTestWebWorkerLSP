@@ -1,5 +1,5 @@
 // main.js
-const worker = new Worker('./js/worker.js', { type: 'module' });
+const worker = new Worker('./js/worker.js', {type: 'module'});
 
 let nextId = 1;
 const pending = new Map();
@@ -25,7 +25,7 @@ function sendRequest(method, params = {}) {
   return new Promise((resolve) => {
     const id = nextId++;
     pending.set(id, resolve);
-    worker.postMessage(JSON.stringify({ jsonrpc: '2.0', id, method, params }));
+    worker.postMessage(JSON.stringify({jsonrpc: '2.0', id, method, params}));
   });
 }
 
