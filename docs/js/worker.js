@@ -16,13 +16,7 @@ console.log('[worker] console redirected OK');
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
 
-// worker.js
-import * as vfs from 'https://esm.sh/@typescript/vfs';
-import ts from 'https://esm.sh/typescript';
 
-// worker.js
-import * as vfs from 'https://esm.sh/@typescript/vfs';
-import ts from 'https://esm.sh/typescript';
 
 class LSPWorker {
   constructor() {
