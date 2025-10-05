@@ -59,7 +59,6 @@ class LSPWorker {
   async bootVfs() {
     if (this.fsMap) return;
     const fsMap = new Map();
-    const system = vfs.createSystem(fsMap);
     const env = await vfs.createDefaultMapFromCDN(
       {target: ts.ScriptTarget.ES2020},
       ts.version,
@@ -68,9 +67,10 @@ class LSPWorker {
     );
     console.log('--- env');
     console.log(env);
-    for (const [k, v] of env) fsMap.set(k, v);
+    env.forEach((v, k) => fsMap.set(k, v));
+    this.system = vfs.createSystem(fsMap);;
     this.fsMap = fsMap;
-    this.system = system;
+    
     this.env = env;
     console.log('[worker] vfs boot completed. TypeScript version:', ts.version);
   }
