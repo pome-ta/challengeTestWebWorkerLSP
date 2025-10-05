@@ -66,6 +66,8 @@ class LSPWorker {
       false,
       ts
     );
+    console.log('--- env');
+    console.log(env);
     for (const [k, v] of env) fsMap.set(k, v);
     this.fsMap = fsMap;
     this.system = system;
