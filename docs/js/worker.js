@@ -19,18 +19,25 @@ import ts from 'https://esm.sh/typescript';
 
 class LSPWorker {
   constructor() {
-    self.onmessage = (ev) => this.handleMessage(ev);
+    self.onmessage = (event) => this.handleMessage(event);
     this.fsMap = null;
     this.system = null;
     this.env = null;
+    
+    /** @type {Record<string, Function>} */
+    this.handlers = {
+      initialize: this.handleInitialize.bind(this),
+      ping: this.handlePing.bind(this), // 例として追加
+    };
+ 
   }
 
-  async handleMessage(ev) {
+  async handleMessage(event) {
     let msg;
     try {
-      msg = JSON.parse(ev.data);
+      msg = JSON.parse(event.data);
     } catch {
-      console.log('[worker raw]', ev.data);
+      console.log('[worker raw]', event.data);
       return;
     }
   
@@ -43,26 +50,39 @@ class LSPWorker {
 
   async handleRequest(msg) {
     const {id, method} = msg;
-    if (method === 'initialize') {
+    const handler = this.handlers[method];
+    if (handler) {
       try {
-        await this.bootVfs();
-        this.respond(id, {
-          capabilities: {
-            completionProvider: {resolveProvider: true},
-          },
-        });
+        const result = await handler(msg.params || {});
+        this.respond(id, result);
       } catch (e) {
-        this.respondError(id, {code: -32000, message: String(e)});
+        this.respondError(id, { code: -32000, message: String(e) });
       }
     } else {
-      this.respondError(id, {code: -32601, message: 'Method not found'});
+      this.respondError(id, { code: -32601, message: `Method not found: ${method}` });
     }
   }
 
   handleNotify(msg) {
     console.log('[worker notify]', msg.method, msg.params ?? '(no params)');
   }
+  
+  // --- 各メソッドハンドラ ---
+  async handleInitialize() {
+    await this.bootVfs();
+    return {
+      capabilities: {
+        completionProvider: { resolveProvider: true },
+      },
+    };
+  }
+  
+  
+  async handlePing(params) {
+    return { echoed: params?.msg ?? '(no message)' };
+  }
 
+  // --- 内部処理 ---
   async bootVfs() {
     if (this.fsMap) {
       return;
