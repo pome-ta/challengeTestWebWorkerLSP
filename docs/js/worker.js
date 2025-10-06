@@ -23,13 +23,13 @@ class LSPWorker {
     this.fsMap = null;
     this.system = null;
     this.env = null;
-    
+
     /** @type {Record<string, Function>} */
     this.handlers = {
       initialize: this.handleInitialize.bind(this),
       ping: this.handlePing.bind(this), // 例として追加
     };
- 
+
   }
 
   async handleMessage(event) {
@@ -40,7 +40,7 @@ class LSPWorker {
       console.log('[worker raw]', event.data);
       return;
     }
-  
+
     if (msg.id) {
       await this.handleRequest(msg);
     } else {
@@ -56,30 +56,30 @@ class LSPWorker {
         const result = await handler(msg.params || {});
         this.respond(id, result);
       } catch (e) {
-        this.respondError(id, { code: -32000, message: String(e) });
+        this.respondError(id, {code: -32000, message: String(e)});
       }
     } else {
-      this.respondError(id, { code: -32601, message: `Method not found: ${method}` });
+      this.respondError(id, {code: -32601, message: `Method not found: ${method}`});
     }
   }
 
   handleNotify(msg) {
     console.log('[worker notify]', msg.method, msg.params ?? '(no params)');
   }
-  
+
   // --- 各メソッドハンドラ ---
   async handleInitialize() {
     await this.bootVfs();
     return {
       capabilities: {
-        completionProvider: { resolveProvider: true },
+        completionProvider: {resolveProvider: true},
       },
     };
   }
-  
-  
+
+
   async handlePing(params) {
-    return { echoed: params?.msg ?? '(no message)' };
+    return {echoed: params?.msg ?? '(no message)'};
   }
 
   // --- 内部処理 ---
@@ -94,7 +94,7 @@ class LSPWorker {
       false,
       ts
     );
-    
+
     env.forEach((v, k) => fsMap.set(k, v));
     this.system = vfs.createSystem(fsMap);
     this.fsMap = fsMap;
