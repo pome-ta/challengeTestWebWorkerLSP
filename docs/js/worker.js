@@ -26,7 +26,14 @@ class LSPWorker {
   }
 
   async handleMessage(ev) {
-    const msg = JSON.parse(ev.data);
+    let msg;
+    try {
+      msg = JSON.parse(ev.data);
+    } catch {
+      console.log('[worker raw]', ev.data);
+      return;
+    }
+  
     if (msg.id) {
       await this.handleRequest(msg);
     } else {
@@ -53,7 +60,7 @@ class LSPWorker {
   }
 
   handleNotify(msg) {
-    console.log('[worker notify]', msg.method, msg.params);
+    console.log('[worker notify]', msg.method, msg.params ?? '(no params)');
   }
 
   async bootVfs() {
@@ -67,12 +74,10 @@ class LSPWorker {
       false,
       ts
     );
-    console.log('--- env');
-    console.log(env);
-    env.forEach((v, k) => fsMap.set(k, v));
-    this.system = vfs.createSystem(fsMap);;
-    this.fsMap = fsMap;
     
+    env.forEach((v, k) => fsMap.set(k, v));
+    this.system = vfs.createSystem(fsMap);
+    this.fsMap = fsMap;
     this.env = env;
     console.log('[worker] vfs boot completed. TypeScript version:', ts.version);
   }
