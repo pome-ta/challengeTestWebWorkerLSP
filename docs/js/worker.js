@@ -57,7 +57,9 @@ class LSPWorker {
   }
 
   async bootVfs() {
-    if (this.fsMap) return;
+    if (this.fsMap) {
+      return;
+    }
     const fsMap = new Map();
     const env = await vfs.createDefaultMapFromCDN(
       {target: ts.ScriptTarget.ES2020},
