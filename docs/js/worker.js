@@ -1,33 +1,19 @@
-// worker.js
-
-function setupConsoleRedirect() {
-  const origLog = console.log;
-  console.log = (...args) => {
-    try {
-      self.postMessage(JSON.stringify({__workerLog: true, args}));
-    } catch {
-      origLog(...args);
-    }
-  };
-}
-
-
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
 
 class LSPWorker {
+  #fsMap;
+  #system;
+  #env;
+  #handlers;
+
   constructor() {
     self.onmessage = (event) => this.handleMessage(event);
-    this.fsMap = null;
-    this.system = null;
-    this.env = null;
 
-    /** @type {Record<string, Function>} */
-    this.handlers = {
+    this.#handlers = {
       initialize: this.handleInitialize.bind(this),
-      ping: this.handlePing.bind(this), // 例として追加
+      ping: this.handlePing.bind(this),
     };
-
   }
 
   async handleMessage(event) {
@@ -48,16 +34,16 @@ class LSPWorker {
 
   async handleRequest(msg) {
     const {id, method} = msg;
-    const handler = this.handlers[method];
+    const handler = this.#handlers[method];
     if (handler) {
       try {
         const result = await handler(msg.params || {});
-        this.respond(id, result);
+        this.#respond(id, result);
       } catch (e) {
-        this.respondError(id, {code: -32000, message: String(e)});
+        this.#respondError(id, {code: -32000, message: String(e)});
       }
     } else {
-      this.respondError(id, {code: -32601, message: `Method not found: ${method}`});
+      this.#respondError(id, {code: -32601, message: `Method not found: ${method}`});
     }
   }
 
@@ -65,9 +51,9 @@ class LSPWorker {
     console.log('[worker notify]', msg.method, msg.params ?? '(no params)');
   }
 
-  // --- 各メソッドハンドラ ---
+  // --- メソッドハンドラ ---
   async handleInitialize() {
-    await this.bootVfs();
+    await this.#bootVfs();
     return {
       capabilities: {
         completionProvider: {resolveProvider: true},
@@ -75,16 +61,14 @@ class LSPWorker {
     };
   }
 
-
   async handlePing(params) {
     return {echoed: params?.msg ?? '(no message)'};
   }
 
-  // --- 内部処理 ---
-  async bootVfs() {
-    if (this.fsMap) {
-      return;
-    }
+  // --- 内部メソッド ---
+  async #bootVfs() {
+    if (this.#fsMap) return;
+
     const fsMap = new Map();
     const env = await vfs.createDefaultMapFromCDN(
       {target: ts.ScriptTarget.ES2020},
@@ -94,22 +78,36 @@ class LSPWorker {
     );
 
     env.forEach((v, k) => fsMap.set(k, v));
-    this.system = vfs.createSystem(fsMap);
-    this.fsMap = fsMap;
-    this.env = env;
+    this.#system = vfs.createSystem(fsMap);
+    this.#fsMap = fsMap;
+    this.#env = env;
+
     console.log(`[worker] vfs boot completed. TypeScript version: ${ts.version}`);
   }
 
-  respond(id, result) {
+  #respond(id, result) {
     self.postMessage(JSON.stringify({jsonrpc: '2.0', id, result}));
   }
 
-  respondError(id, error) {
+  #respondError(id, error) {
     self.postMessage(JSON.stringify({jsonrpc: '2.0', id, error}));
   }
 }
 
 
+function setupConsoleRedirect() {
+  const origLog = console.log;
+  console.log = (...args) => {
+    try {
+      self.postMessage(JSON.stringify({__workerLog: true, args}));
+    } catch {
+      origLog(...args);
+    }
+  };
+}
+
 setupConsoleRedirect();
-console.log(`[worker] console redirected OK`);
+console.log('[worker] console redirected OK');
+
 new LSPWorker();
+
