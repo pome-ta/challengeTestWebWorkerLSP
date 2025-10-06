@@ -1,4 +1,5 @@
 // worker.js
+
 function setupConsoleRedirect() {
   const origLog = console.log;
   console.log = (...args) => {
@@ -10,9 +11,6 @@ function setupConsoleRedirect() {
   };
 }
 
-setupConsoleRedirect();
-
-console.log('[worker] console redirected OK');
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
@@ -99,7 +97,7 @@ class LSPWorker {
     this.system = vfs.createSystem(fsMap);
     this.fsMap = fsMap;
     this.env = env;
-    console.log('[worker] vfs boot completed. TypeScript version:', ts.version);
+    console.log(`[worker] vfs boot completed. TypeScript version: ${ts.version}`);
   }
 
   respond(id, result) {
@@ -111,4 +109,7 @@ class LSPWorker {
   }
 }
 
+
+setupConsoleRedirect();
+console.log(`[worker] console redirected OK`);
 new LSPWorker();
