@@ -1,6 +1,22 @@
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
 
+
+function setupConsoleRedirect() {
+  const origLog = console.log;
+  console.log = (...args) => {
+    try {
+      self.postMessage(JSON.stringify({__workerLog: true, args}));
+    } catch {
+      origLog(...args);
+    }
+  };
+}
+
+setupConsoleRedirect();
+console.log('[worker] console redirected OK');
+
+
 class LSPWorker {
   #fsMap;
   #system;
@@ -8,6 +24,7 @@ class LSPWorker {
   #handlers;
 
   constructor() {
+    console.log('[worker] LSPWorker constructed');
     self.onmessage = (event) => this.handleMessage(event);
 
     this.#handlers = {
@@ -67,7 +84,9 @@ class LSPWorker {
 
   // --- 内部メソッド ---
   async #bootVfs() {
-    if (this.#fsMap) return;
+    if (this.#fsMap) {
+      return;
+    }
 
     const fsMap = new Map();
     const env = await vfs.createDefaultMapFromCDN(
@@ -95,19 +114,7 @@ class LSPWorker {
 }
 
 
-function setupConsoleRedirect() {
-  const origLog = console.log;
-  console.log = (...args) => {
-    try {
-      self.postMessage(JSON.stringify({__workerLog: true, args}));
-    } catch {
-      origLog(...args);
-    }
-  };
-}
 
-setupConsoleRedirect();
-console.log('[worker] console redirected OK');
 
 new LSPWorker();
 
