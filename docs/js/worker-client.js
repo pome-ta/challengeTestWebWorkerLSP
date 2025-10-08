@@ -36,7 +36,11 @@ export class WorkerClient {
     const msg = { jsonrpc: '2.0', method, params }; // id なし
     this.#worker.postMessage(JSON.stringify(msg));
   }
-
+  
+  terminate() {
+    this.#worker.terminate();
+    console.log('[WorkerClient] Worker terminated.');
+  }
 
   /**
    * Worker からのメッセージ受信処理
@@ -73,11 +77,8 @@ export function createWorkerRpc(workerPath) {
     client,
     initialize: (params) => client.send('initialize', params),
     initialized: (params) => client.notify('initialized', params),
-    shutdown: async () => {
-      const result = await client.send('shutdown');
-      client.notify('exit'); // ← shutdown後にexit通知
-      return result;
-    },
+    shutdown: () => client.send('shutdown'),
+    exit: () => client.notify('exit'), // exit 通知を追加
   };
 }
 

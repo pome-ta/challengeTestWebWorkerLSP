@@ -9,9 +9,13 @@ import { createWorkerRpc } from './worker-client.js';
   console.log('initialize result:', init);
 
   rpc.initialized({}); // ← notify(応答なし)
-
   const shutdown = await rpc.shutdown();
   console.log('shutdown result:', shutdown);
+
+  // 🆕 exit 通知+Worker終了
+  rpc.exit();
+  rpc.client.terminate();
+
   console.log('--- done ---');
 })();
 
