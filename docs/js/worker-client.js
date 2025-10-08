@@ -77,6 +77,7 @@ export function createWorkerRpc(workerPath) {
     client,
     initialize: (params) => client.send('initialize', params),
     initialized: (params) => client.notify('initialized', params),
+    ping: (params) => client.send('ping', params),
     shutdown: () => client.send('shutdown'),
     exit: () => client.notify('exit'), // exit 通知を追加
   };

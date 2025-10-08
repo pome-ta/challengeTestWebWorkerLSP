@@ -35,7 +35,6 @@ class LspServerCore {
   }
 
 
-
   async ping(params) {
     return { echoed: params?.msg ?? '(no message)' };
   }

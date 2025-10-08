@@ -8,13 +8,16 @@ import { createWorkerRpc } from './worker-client.js';
   const init = await rpc.initialize({ processId: null });
   console.log('initialize result:', init);
 
-  rpc.initialized({}); // ← notify(応答なし)
+  rpc.initialized({});
+  const pong = await rpc.ping({ msg: 'Hello from main' });
+  console.log('ping result:', pong);
+  
   const shutdown = await rpc.shutdown();
   console.log('shutdown result:', shutdown);
 
-  // 🆕 exit 通知+Worker終了
+  // exit 通知+Worker終了
   rpc.exit();
-  rpc.client.terminate();
+  ///rpc.client.terminate();
 
   console.log('--- done ---');
 })();
