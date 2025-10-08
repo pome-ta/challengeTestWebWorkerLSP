@@ -13,7 +13,7 @@ export class WorkerClient {
   }
 
   /**
-   * JSON-RPC リクエストを送信
+   * JSON-RPC リクエスト(応答あり)
    * @param {string} method
    * @param {object} [params={}]
    * @returns {Promise<object>}
@@ -27,6 +27,16 @@ export class WorkerClient {
       this.#worker.postMessage(JSON.stringify(msg));
     });
   }
+  /**
+   * JSON-RPC 通知(応答なし)
+   * @param {string} method
+   * @param {object} [params={}]
+   */
+  notify(method, params = {}) {
+    const msg = { jsonrpc: '2.0', method, params }; // id なし
+    this.#worker.postMessage(JSON.stringify(msg));
+  }
+
 
   /**
    * Worker からのメッセージ受信処理
@@ -62,7 +72,8 @@ export function createWorkerRpc(workerPath) {
   return {
     client,
     initialize: (params) => client.send('initialize', params),
-    initialized: (params) => client.send('initialized', params),
+    initialized: (params) => client.notify('initialized', params), // ← notifyに変更
     shutdown: () => client.send('shutdown'),
   };
 }
+

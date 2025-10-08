@@ -29,6 +29,11 @@ class LspServerCore {
       },
     };
   }
+  async initialized() {
+    console.log('[worker] initialized notification received');
+  }
+
+
 
   async ping(params) {
     return { echoed: params?.msg ?? '(no message)' };
@@ -77,6 +82,7 @@ class LSPWorker {
     // メソッド名とハンドラの対応表
     this.#handlers = {
       initialize: this.#core.initialize.bind(this.#core),
+      initialized: this.#core.initialized.bind(this.#core),
       shutdown: this.#core.shutdown.bind(this.#core),
       ping: this.#core.ping.bind(this.#core),
     };
@@ -96,27 +102,41 @@ class LSPWorker {
     if (msg.id) {
       await this.#handleRequest(msg);
     } else {
-      this.#handleNotify(msg);
+      await this.#handleNotify(msg);
     }
   }
 
   async #handleRequest(msg) {
     const { id, method } = msg;
     const handler = this.#handlers[method];
-    if (handler) {
-      try {
-        const result = await handler(msg.params || {});
-        this.#respond(id, result);
-      } catch (e) {
-        this.#respondError(id, { code: -32000, message: String(e) });
-      }
-    } else {
+    
+     if (!handler) {
       this.#respondError(id, { code: -32601, message: `Method not found: ${method}` });
+      return;
+    }
+
+    try {
+      const result = await handler(msg.params || {});
+      this.#respond(id, result);
+    } catch (e) {
+      this.#respondError(id, { code: -32000, message: String(e) });
     }
   }
+  
+  
+  async #handleNotify(msg) {
+    const { method, params } = msg;
+    const handler = this.#handlers[method];
 
-  #handleNotify(msg) {
-    console.log('[worker notify]', msg.method, msg.params ?? '(no params)');
+    if (handler) {
+      try {
+        await handler(params || {});
+      } catch (e) {
+        console.warn(`[worker] notify handler error in ${method}:`, e);
+      }
+    } else {
+      console.log('[worker notify]', method, params ?? '(no params)');
+    }
   }
 
   #respond(id, result) {
