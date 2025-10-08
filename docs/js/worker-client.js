@@ -72,8 +72,12 @@ export function createWorkerRpc(workerPath) {
   return {
     client,
     initialize: (params) => client.send('initialize', params),
-    initialized: (params) => client.notify('initialized', params), // ← notifyに変更
-    shutdown: () => client.send('shutdown'),
+    initialized: (params) => client.notify('initialized', params),
+    shutdown: async () => {
+      const result = await client.send('shutdown');
+      client.notify('exit'); // ← shutdown後にexit通知
+      return result;
+    },
   };
 }
 

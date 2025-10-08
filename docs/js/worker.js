@@ -1,3 +1,4 @@
+// worker.js
 import { setupConsoleRedirect } from './worker-utils.js';
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
@@ -46,6 +47,11 @@ class LspServerCore {
     console.log('[worker] shutdown completed.');
     return { success: true };
   }
+  
+  async exit() {
+    console.log('[worker] exit notification received. closing worker...');
+    self.close(); // ← Worker終了
+  }
 
   async #bootVfs() {
     if (this.#fsMap) {
@@ -84,6 +90,7 @@ class LSPWorker {
       initialize: this.#core.initialize.bind(this.#core),
       initialized: this.#core.initialized.bind(this.#core),
       shutdown: this.#core.shutdown.bind(this.#core),
+      exit: this.#core.exit.bind(this.#core),
       ping: this.#core.ping.bind(this.#core),
     };
 

@@ -1,3 +1,4 @@
+// main.js
 import { createWorkerRpc } from './worker-client.js';
 
 (async () => {
@@ -13,3 +14,4 @@ import { createWorkerRpc } from './worker-client.js';
   console.log('shutdown result:', shutdown);
   console.log('--- done ---');
 })();
+
