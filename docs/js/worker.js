@@ -79,6 +79,29 @@ class LspServerCore {
     // この呼び出し以降 Worker 内のコードは実行されなくなります
     self.close();
   }
+  
+  /**
+   * LSP: textDocument/completion の簡易実装
+   * params: { textDocument: { uri }, position: { line, character } }
+   */
+  async completion(params) {
+    const { textDocument, position } = params;
+    const line = position.line;
+    const ch = position.character;
+
+    // 簡易例: 現在の行の文字列を取得して補完候補を作る
+    const prefix = (textDocument.content?.[line] || '').slice(0, ch);
+
+    // 仮の候補
+    const items = [
+      { label: 'console', kind: 3 },
+      { label: 'const', kind: 14 },
+      { label: 'let', kind: 14 },
+      { label: 'function', kind: 3 },
+    ].filter(i => i.label.startsWith(prefix));
+
+    return { isIncomplete: false, items };
+  }
 
   /**
    * #bootVfs: @typescript/vfs を使って仮想環境を構築する内部メソッド
@@ -120,6 +143,7 @@ class LSPWorker {
       shutdown: this.#core.shutdown.bind(this.#core),
       exit: this.#core.exit.bind(this.#core),
       ping: this.#core.ping.bind(this.#core),
+      'textDocument/completion': this.#core.completion.bind(this.#core),
     };
 
     // Worker の onmessage を設定(メインスレッドからの受信)
