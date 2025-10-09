@@ -1,16 +1,29 @@
-// worker.js
+// js/worker.js
+/**
+ * LSP 風の Worker 実装(最小)
+ *
+ * - LspServerCore: TypeScript/vfs の初期化や LSP ライクなロジックを担当
+ * - LSPWorker: JSON-RPC 風メッセージのループ(request / notification を振り分け)
+ *
+ * 重要な設計決定:
+ * - 'shutdown' は request(応答あり)で内部状態をクリーンする(result を返す)
+ * - 'exit' は notification(応答なし)。Worker 側で self.close() を呼んで自律終了する(LSP仕様準拠)
+ *
+ * 注: この Worker はメッセージを文字列(JSON)として受渡す前提(postMessage(JSON.stringify(...)))です。
+ */
+
 import { setupConsoleRedirect } from './worker-utils.js';
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
 
-
 setupConsoleRedirect();
 console.log('[worker] console redirected OK');
 
-// -----------------------------
-// LspServerCore: LSPロジック担当
-// -----------------------------
+/**
+ * LspServerCore
+ * - TypeScript / vfs の初期化・シャットダウンなどの実処理を持つクラス
+ */
 class LspServerCore {
   #fsMap;
   #system;
@@ -22,6 +35,10 @@ class LspServerCore {
     this.#env = null;
   }
 
+  /**
+   * initialize: VFS を初期化して capabilities を返す
+   * @returns {{capabilities: object}}
+   */
   async initialize() {
     await this.#bootVfs();
     return {
@@ -30,33 +47,61 @@ class LspServerCore {
       },
     };
   }
+
+  /**
+   * initialized (notification)
+   * - initialized 通知を受けた時に行いたいことがあればここに追加
+   */
   async initialized() {
     console.log('[worker] initialized notification received');
   }
 
-
+  /**
+   * ping: 簡易ヘルスチェック / echo
+   * @param {{msg?: string}} params
+   * @returns {{echoed: string}}
+   */
   async ping(params) {
     return { echoed: params?.msg ?? '(no message)' };
   }
-  
+
+  /**
+   * shutdown: 内部状態のクリーンアップ(応答あり)
+   * @returns {{success: boolean}}
+   */
   async shutdown() {
-    this.#fsMap?.clear();
+    // 仮想FS をクリアし、参照解放
+    try {
+      this.#fsMap?.clear();
+    } catch (e) {
+      console.warn('[worker] shutdown: error clearing fsMap', e);
+    }
     this.#system = null;
     this.#env = null;
+
     console.log('[worker] shutdown completed.');
     return { success: true };
   }
-  
+
+  /**
+   * exit: notification(応答不要) → Worker 自己終了
+   * - LSP 仕様に従い、サーバーが自分で終了する実装。
+   * - exit は通知なのでクライアントは何も返ってこない。
+   */
   async exit() {
     console.log('[worker] exit notification received. closing worker...');
-    self.close(); // ← Worker終了
+    // 重要: self.close() は現在の Worker スレッドを終了する(非同期で即時)
+    // この呼び出し以降 Worker 内のコードは実行されなくなります
+    self.close();
   }
 
+  /**
+   * #bootVfs: @typescript/vfs を使って仮想環境を構築する内部メソッド
+   */
   async #bootVfs() {
-    if (this.#fsMap) {
-      return;
-    }
+    if (this.#fsMap) return;
 
+    // CDN から TypeScript の lib を取得して仮想ファイルシステムを構築
     const fsMap = new Map();
     const env = await vfs.createDefaultMapFromCDN(
       { target: ts.ScriptTarget.ES2020 },
@@ -65,6 +110,7 @@ class LspServerCore {
       ts
     );
 
+    // Map の key/value を fsMap にコピー
     env.forEach((v, k) => fsMap.set(k, v));
     this.#system = vfs.createSystem(fsMap);
     this.#fsMap = fsMap;
@@ -74,9 +120,11 @@ class LspServerCore {
   }
 }
 
-// -----------------------------
-// LSPWorker: JSON-RPC ループ担当
-// -----------------------------
+/**
+ * LSPWorker
+ * - JSON-RPC 風メッセージを受け取り、request/notification を振り分ける
+ * - handlers テーブルには LspServerCore のメソッドを束ねて登録している
+ */
 class LSPWorker {
   #core;
   #handlers;
@@ -84,7 +132,7 @@ class LSPWorker {
   constructor() {
     this.#core = new LspServerCore();
 
-    // メソッド名とハンドラの対応表
+    // メソッド名 -> ハンドラ(this.#core のメソッド) を登録
     this.#handlers = {
       initialize: this.#core.initialize.bind(this.#core),
       initialized: this.#core.initialized.bind(this.#core),
@@ -93,6 +141,7 @@ class LSPWorker {
       ping: this.#core.ping.bind(this.#core),
     };
 
+    // Worker の onmessage を設定(メインスレッドからの受信)
     self.onmessage = (event) => this.#handleMessage(event);
   }
 
@@ -100,8 +149,8 @@ class LSPWorker {
     let msg;
     try {
       msg = JSON.parse(event.data);
-    } catch {
-      console.log('[worker raw]', event.data);
+    } catch (e) {
+      console.warn('[worker] invalid message (not JSON):', event.data);
       return;
     }
 
@@ -112,11 +161,12 @@ class LSPWorker {
     }
   }
 
+  // request (id がある) の処理
   async #handleRequest(msg) {
     const { id, method } = msg;
     const handler = this.#handlers[method];
-    
-     if (!handler) {
+
+    if (!handler) {
       this.#respondError(id, { code: -32601, message: `Method not found: ${method}` });
       return;
     }
@@ -128,33 +178,35 @@ class LSPWorker {
       this.#respondError(id, { code: -32000, message: String(e) });
     }
   }
-  
-  
+
+  // notification (id がない) の処理
   async #handleNotify(msg) {
     const { method, params } = msg;
     const handler = this.#handlers[method];
 
     if (handler) {
       try {
+        // 通知なので戻り値は返さない(LSP の notify)
         await handler(params || {});
       } catch (e) {
         console.warn(`[worker] notify handler error in ${method}:`, e);
       }
     } else {
-      console.log('[worker notify]', method, params ?? '(no params)');
+      console.log('[worker notify] unknown method:', method, params ?? '(no params)');
     }
   }
 
+  // JSON-RPC 形式で結果を返す(request のみ)
   #respond(id, result) {
     self.postMessage(JSON.stringify({ jsonrpc: '2.0', id, result }));
   }
 
+  // JSON-RPC 形式でエラーを返す(request のみ)
   #respondError(id, error) {
     self.postMessage(JSON.stringify({ jsonrpc: '2.0', id, error }));
   }
 }
 
-// -----------------------------
-// 実行開始
-// -----------------------------
+// 起動
 new LSPWorker();
+
