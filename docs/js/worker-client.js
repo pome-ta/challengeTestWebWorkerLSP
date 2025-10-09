@@ -36,11 +36,19 @@ export class WorkerClient {
   send(method, params = {}) {
     const id = this.#nextId++;
     const msg = { jsonrpc: '2.0', id, method, params };
-
-    return new Promise((resolve) => {
-      this.#pending.set(id, resolve);
+    
+    
+    return new Promise((resolve, reject) => {
+      this.#pending.set(id, (response) => {
+        if ('error' in response) {
+          reject(response.error);
+        } else {
+          resolve(response.result);
+        }
+      });
       this.#worker.postMessage(JSON.stringify(msg));
     });
+ 
   }
 
   /**
