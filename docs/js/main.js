@@ -1,5 +1,5 @@
-// main.js (トップレベル ESM)
-// - createWorkerRpc を使った LSP 的なライフサイクルの例
+// main.js
+
 import { createWorkerRpc } from './worker-client.js';
 
 (async () => {
@@ -18,6 +18,15 @@ import { createWorkerRpc } from './worker-client.js';
   // ping (request)
   const pong = await rpc.ping({ msg: 'Hello from main' });
   console.log('ping result:', pong);
+  //const result = await rpc.client.send('unknownMethod');
+  console.log('--- --- ---');
+  
+  try {
+    const bad = await rpc.client.send('doesNotExist');
+    console.log('bad result:', bad);
+  } catch (e) {
+    console.error('bad call error:', e);
+  }
 
   // shutdown (request)
   const shutdown = await rpc.shutdown();

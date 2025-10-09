@@ -1,16 +1,4 @@
 // js/worker.js
-/**
- * LSP 風の Worker 実装(最小)
- *
- * - LspServerCore: TypeScript/vfs の初期化や LSP ライクなロジックを担当
- * - LSPWorker: JSON-RPC 風メッセージのループ(request / notification を振り分け)
- *
- * 重要な設計決定:
- * - 'shutdown' は request(応答あり)で内部状態をクリーンする(result を返す)
- * - 'exit' は notification(応答なし)。Worker 側で self.close() を呼んで自律終了する(LSP仕様準拠)
- *
- * 注: この Worker はメッセージを文字列(JSON)として受渡す前提(postMessage(JSON.stringify(...)))です。
- */
 
 import { setupConsoleRedirect } from './worker-utils.js';
 
@@ -65,10 +53,7 @@ class LspServerCore {
     return { echoed: params?.msg ?? '(no message)' };
   }
 
-  /**
-   * shutdown: 内部状態のクリーンアップ(応答あり)
-   * @returns {{success: boolean}}
-   */
+  
   async shutdown() {
     // 仮想FS をクリアし、参照解放
     try {
@@ -120,11 +105,7 @@ class LspServerCore {
   }
 }
 
-/**
- * LSPWorker
- * - JSON-RPC 風メッセージを受け取り、request/notification を振り分ける
- * - handlers テーブルには LspServerCore のメソッドを束ねて登録している
- */
+
 class LSPWorker {
   #core;
   #handlers;
@@ -201,9 +182,20 @@ class LSPWorker {
     self.postMessage(JSON.stringify({ jsonrpc: '2.0', id, result }));
   }
 
-  // JSON-RPC 形式でエラーを返す(request のみ)
+
+  
   #respondError(id, error) {
-    self.postMessage(JSON.stringify({ jsonrpc: '2.0', id, error }));
+    const standardized = {
+      code: typeof error.code === 'number' ? error.code : -32000, // Server error (default)
+      message: String(error.message ?? error),
+    };
+    if (error.data !== undefined) standardized.data = error.data;
+
+    self.postMessage(JSON.stringify({
+      jsonrpc: '2.0',
+      id,
+      error: standardized,
+    }));
   }
 }
 
