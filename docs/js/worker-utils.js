@@ -1,25 +1,44 @@
 // js/worker-utils.js
 /**
- * Worker 内の console.log を main スレッドへ転送するユーティリティ。
+ * setupConsoleRedirect()
+ * Worker 内での console.log 等を main 側に転送するユーティリティ。
+ * - main 側は event.data を JSON.parse して受け取る前提(文字列で転送)
+ * - 転送できない場合は元の console を使用する(フォールバック)
  *
- * - Worker 側で console.log(...) を呼ぶと、main 側の onmessage 経由で受け取り、
- *   main 側で通常の console.log として表示されるようにします。
- * - 文字列化に失敗した場合はフォールバックで元の console.log を呼びます。
- *
- * 使い方(worker.js の先頭で呼ぶ):
+ * 使い方:
  *   import { setupConsoleRedirect } from './worker-utils.js';
  *   setupConsoleRedirect();
  */
 export function setupConsoleRedirect() {
-  const origLog = console.log;
-  console.log = (...args) => {
-    try {
-      // main と同じ形で受け取れるように構造化可能なデータを string にして送る
-      self.postMessage(JSON.stringify({ __workerLog: true, args }));
-    } catch {
-      // stringify などで例外が出た場合は Worker 内でそのままログ
-      origLog(...args);
-    }
+  // 保存
+  const orig = {
+    log: console.log,
+    warn: console.warn,
+    info: console.info,
+    error: console.error,
   };
-}
 
+  function safePost(obj) {
+    try {
+      self.postMessage(JSON.stringify(obj));
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function makeRedirect(fnName) {
+    return (...args) => {
+      const payload = { __workerLog: true, level: fnName, args };
+      if (!safePost(payload)) {
+        // 転送に失敗したら通常のコンソールへ
+        orig[fnName].apply(console, args);
+      }
+    };
+  }
+
+  console.log = makeRedirect('log');
+  console.info = makeRedirect('info');
+  console.warn = makeRedirect('warn');
+  console.error = makeRedirect('error');
+}

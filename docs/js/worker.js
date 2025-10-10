@@ -1,7 +1,12 @@
-// js/worker.js
+// js/worker.js (改訂版)
+// Worker 側: TypeScript / vfs を初期化し、JSON-RPC 風のリクエストを処理する。
+// 重要な改善点:
+//  - createVirtualTypeScriptEnvironment を使って言語サービス(env)を正しく保持
+//  - bootVfs の同時実行ガード (#bootPromise)
+//  - JSON-RPC の id 判定を厳密に ('method' in msg) を基準
+//  - エラーレスポンス標準化 (code/message/data)
 
 import { setupConsoleRedirect } from './worker-utils.js';
-
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
 
@@ -9,217 +14,188 @@ setupConsoleRedirect();
 console.log('[worker] console redirected OK');
 
 /**
- * LspServerCore
- * - TypeScript / vfs の初期化・シャットダウンなどの実処理を持つクラス
+ * send helper - main 側は JSON 文字列を期待する設計に揃えているので stringify する
+ */
+function _send(obj) {
+  try { self.postMessage(JSON.stringify(obj)); }
+  catch (e) {
+    // 万が一オブジェクトで送れない環境がある場合の保険(通常は不要)
+    try { self.postMessage(obj); } catch {}
+  }
+}
+
+/**
+ * LspServerCore - 実仕事 (vfs 初期化 / shutdown / exit / ping など)
  */
 class LspServerCore {
-  #fsMap;
-  #system;
-  #env;
+  #fsMap = null;    // Map によるファイルコンテンツ(lib 等)
+  #system = null;   // vfs system
+  #env = null;      // createVirtualTypeScriptEnvironment の戻り(言語サービス等を含む)
+  #bootPromise = null;
 
-  constructor() {
-    this.#fsMap = null;
-    this.#system = null;
-    this.#env = null;
-  }
+  constructor() {}
 
-  /**
-   * initialize: VFS を初期化して capabilities を返す
-   * @returns {{capabilities: object}}
-   */
+  // initialize: VFS を初期化して capabilities を返す
   async initialize() {
     await this.#bootVfs();
-    return {
-      capabilities: {
-        completionProvider: { resolveProvider: true },
-      },
-    };
+    return { capabilities: { completionProvider: { resolveProvider: true } } };
   }
 
-  /**
-   * initialized (notification)
-   * - initialized 通知を受けた時に行いたいことがあればここに追加
-   */
   async initialized() {
     console.log('[worker] initialized notification received');
   }
 
-  /**
-   * ping: 簡易ヘルスチェック / echo
-   * @param {{msg?: string}} params
-   * @returns {{echoed: string}}
-   */
   async ping(params) {
     return { echoed: params?.msg ?? '(no message)' };
   }
 
-  
+  // shutdown: release resources (同期的に安全に)
   async shutdown() {
-    // 仮想FS をクリアし、参照解放
     try {
-      this.#fsMap?.clear();
+      // 簡易クリーンアップ。実装次第でより丁寧に。
+      if (this.#fsMap && typeof this.#fsMap.clear === 'function') this.#fsMap.clear();
     } catch (e) {
       console.warn('[worker] shutdown: error clearing fsMap', e);
     }
     this.#system = null;
     this.#env = null;
-
+    this.#fsMap = null;
     console.log('[worker] shutdown completed.');
     return { success: true };
   }
 
-  /**
-   * exit: notification(応答不要) → Worker 自己終了
-   * - LSP 仕様に従い、サーバーが自分で終了する実装。
-   * - exit は通知なのでクライアントは何も返ってこない。
-   */
+  // exit: notification -> まず shutdown を順守してから閉じたいならここで await shutdown()
   async exit() {
-    console.log('[worker] exit notification received. closing worker...');
-    // 重要: self.close() は現在の Worker スレッドを終了する(非同期で即時)
-    // この呼び出し以降 Worker 内のコードは実行されなくなります
+    console.log('[worker] exit notification received.');
+    // LSP の慣習: クライアントが先に shutdown request を呼び、最後に exit notification を送る。
+    // ここでは強制的に self.close() を呼ぶ(クライアント実装に依存)
+    try {
+      // optionally await this.shutdown(); // もし自動 cleanup が望ましければ有効にする
+    } catch (e) {}
     self.close();
   }
-  
-  /**
-   * LSP: textDocument/completion の簡易実装
-   * params: { textDocument: { uri }, position: { line, character } }
-   */
-  async completion(params) {
-    const { textDocument, position } = params;
-    const line = position.line;
-    const ch = position.character;
-
-    // 簡易例: 現在の行の文字列を取得して補完候補を作る
-    const prefix = (textDocument.content?.[line] || '').slice(0, ch);
-
-    // 仮の候補
-    const items = [
-      { label: 'console', kind: 3 },
-      { label: 'const', kind: 14 },
-      { label: 'let', kind: 14 },
-      { label: 'function', kind: 3 },
-    ].filter(i => i.label.startsWith(prefix));
-
-    return { isIncomplete: false, items };
-  }
 
   /**
-   * #bootVfs: @typescript/vfs を使って仮想環境を構築する内部メソッド
+   * 内部: vfs を起動する(同時呼び出しを避けるため #bootPromise を使う)
    */
   async #bootVfs() {
-    if (this.#fsMap) return;
+    if (this.#env) return;            // 既に作られているなら早期 return
+    if (this.#bootPromise) return this.#bootPromise; // すでに起動中なら待つ
 
-    // CDN から TypeScript の lib を取得して仮想ファイルシステムを構築
-    const fsMap = new Map();
-    const env = await vfs.createDefaultMapFromCDN(
-      { target: ts.ScriptTarget.ES2020 },
-      ts.version,
-      false,
-      ts
-    );
+    this.#bootPromise = (async () => {
+      // defaultMap には TypeScript の lib *.d.ts が Map で入る
+      const defaultMap = await vfs.createDefaultMapFromCDN({ target: ts.ScriptTarget.ES2020 }, ts.version, false, ts);
+      // system を作る
+      const system = vfs.createSystem(defaultMap);
+      // createVirtualTypeScriptEnvironment を使い言語サービス環境を構築する
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, { allowJs: true });
 
-    // Map の key/value を fsMap にコピー
-    env.forEach((v, k) => fsMap.set(k, v));
-    this.#system = vfs.createSystem(fsMap);
-    this.#fsMap = fsMap;
-    this.#env = env;
+      // 保持
+      this.#fsMap = defaultMap;
+      this.#system = system;
+      this.#env = env;
 
-    console.log(`[worker] vfs boot completed. TypeScript version: ${ts.version}`);
+      console.log('[worker] vfs boot completed. TypeScript version:', ts.version);
+      return env;
+    })();
+
+    try {
+      return await this.#bootPromise;
+    } finally {
+      // boot 完了後は promise をクリアする(将来の二重起動ガードのため)
+      this.#bootPromise = null;
+    }
   }
+
+  // 将来: 文書同期・補完・diagnostics などのメソッドをここへ実装する(例: didOpen, didChange, completion, resolve...)
 }
 
-
+/**
+ * LSPWorker - JSON-RPC のループ / ハンドラディスパッチ担当
+ */
 class LSPWorker {
   #core;
   #handlers;
 
   constructor() {
     this.#core = new LspServerCore();
-
-    // メソッド名 -> ハンドラ(this.#core のメソッド) を登録
+    // 必要に応じてここに 'textDocument/didOpen' などを追加する
     this.#handlers = {
       initialize: this.#core.initialize.bind(this.#core),
       initialized: this.#core.initialized.bind(this.#core),
       shutdown: this.#core.shutdown.bind(this.#core),
       exit: this.#core.exit.bind(this.#core),
       ping: this.#core.ping.bind(this.#core),
-      'textDocument/completion': this.#core.completion.bind(this.#core),
+      // 'textDocument/didOpen': this.#core.didOpen.bind(this.#core), // 例
     };
 
-    // Worker の onmessage を設定(メインスレッドからの受信)
     self.onmessage = (event) => this.#handleMessage(event);
   }
 
   async #handleMessage(event) {
-    let msg;
+    let msg = event.data;
     try {
-      msg = JSON.parse(event.data);
+      if (typeof msg === 'string') msg = JSON.parse(msg);
+      // else: main が既にオブジェクトで送った場合を考慮して受け入れる
     } catch (e) {
-      console.warn('[worker] invalid message (not JSON):', event.data);
+      // Parse error -> JSON-RPC の仕様に従い id があればエラー応答
+      const raw = event.data;
+      console.warn('[worker] invalid message (not JSON):', raw);
+      // もし id を含む文字列だったら parse error を返す。ここでは文字列かつ parse 失敗なので応答しないのも選択肢
       return;
     }
 
-    if (msg.id) {
+    // JSON-RPC メッセージが "request/notification/response" のどれかを判定する
+    // 我々は主に request/notification を受ける想定なので、'method' の有無で振り分ける
+    if (!('method' in msg)) {
+      // ここに response が来るべきではない。その場合はログのみ。
+      console.warn('[worker] received message without method (ignored):', msg);
+      return;
+    }
+
+    const method = msg.method;
+    const isRequest = ('id' in msg) && (msg.id !== null && msg.id !== undefined);
+
+    if (isRequest) {
       await this.#handleRequest(msg);
     } else {
       await this.#handleNotify(msg);
     }
   }
 
-  // request (id がある) の処理
   async #handleRequest(msg) {
-    const { id, method } = msg;
+    const { id, method, params } = msg;
     const handler = this.#handlers[method];
-
     if (!handler) {
-      this.#respondError(id, { code: -32601, message: `Method not found: ${method}` });
+      // Method not found
+      _send({ jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${method}` }});
       return;
     }
-
     try {
-      const result = await handler(msg.params || {});
-      this.#respond(id, result);
+      const result = await handler(params ?? {});
+      // result が undefined でも JSON-RPC では result: null ではなく result: undefined は OK だが
+      _send({ jsonrpc: '2.0', id, result: result === undefined ? null : result });
     } catch (e) {
-      this.#respondError(id, { code: -32000, message: String(e) });
+      // エラーを標準化して返す
+      const err = (e && typeof e === 'object' && 'code' in e && 'message' in e)
+        ? e
+        : { code: -32000, message: String(e), data: (e && e.stack) ? { stack: e.stack } : undefined };
+      _send({ jsonrpc: '2.0', id, error: err });
     }
   }
 
-  // notification (id がない) の処理
   async #handleNotify(msg) {
     const { method, params } = msg;
     const handler = this.#handlers[method];
-
     if (handler) {
       try {
-        // 通知なので戻り値は返さない(LSP の notify)
-        await handler(params || {});
+        await handler(params ?? {});
       } catch (e) {
         console.warn(`[worker] notify handler error in ${method}:`, e);
       }
     } else {
       console.log('[worker notify] unknown method:', method, params ?? '(no params)');
     }
-  }
-
-  // JSON-RPC 形式で結果を返す(request のみ)
-  #respond(id, result) {
-    self.postMessage(JSON.stringify({ jsonrpc: '2.0', id, result }));
-  }
-
-
-  
-  #respondError(id, error) {
-    const standardized = {
-      code: typeof error.code === 'number' ? error.code : -32000, // Server error (default)
-      message: String(error.message ?? error),
-    };
-    if (error.data !== undefined) standardized.data = error.data;
-
-    self.postMessage(JSON.stringify({
-      jsonrpc: '2.0',
-      id,
-      error: standardized,
-    }));
   }
 }
 
