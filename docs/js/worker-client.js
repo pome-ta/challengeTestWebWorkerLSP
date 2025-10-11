@@ -98,6 +98,10 @@ export class WorkerClient {
    * event.data は文字列(JSON)で来る前提(worker 側が JSON.stringify していること)
    */
   #onMessage(event) {
+
+
+    
+
     const raw = event.data;
     if (this.#debug) console.debug('[WorkerClient] onmessage typeof', typeof raw, raw);
 

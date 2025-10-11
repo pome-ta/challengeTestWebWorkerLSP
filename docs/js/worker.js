@@ -1,17 +1,10 @@
-// js/worker.js (改訂版)
-// Worker 側: TypeScript / vfs を初期化し、JSON-RPC 風のリクエストを処理する。
-// 重要な改善点:
-//  - createVirtualTypeScriptEnvironment を使って言語サービス(env)を正しく保持
-//  - bootVfs の同時実行ガード (#bootPromise)
-//  - JSON-RPC の id 判定を厳密に ('method' in msg) を基準
-//  - エラーレスポンス標準化 (code/message/data)
+// worker.js (改訂版)
 
-import { setupConsoleRedirect } from './worker-utils.js';
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
 
-setupConsoleRedirect();
-console.log('[worker] console redirected OK');
+
+
 
 /**
  * send helper - main 側は JSON 文字列を期待する設計に揃えているので stringify する
@@ -33,7 +26,10 @@ class LspServerCore {
   #env = null;      // createVirtualTypeScriptEnvironment の戻り(言語サービス等を含む)
   #bootPromise = null;
 
-  constructor() {}
+  constructor() {
+  }
+  
+
 
   // initialize: VFS を初期化して capabilities を返す
   async initialize() {
@@ -42,7 +38,7 @@ class LspServerCore {
   }
 
   async initialized() {
-    console.log('[worker] initialized notification received');
+    console.log('initialized notification received');
   }
 
   async ping(params) {
@@ -55,18 +51,18 @@ class LspServerCore {
       // 簡易クリーンアップ。実装次第でより丁寧に。
       if (this.#fsMap && typeof this.#fsMap.clear === 'function') this.#fsMap.clear();
     } catch (e) {
-      console.warn('[worker] shutdown: error clearing fsMap', e);
+      console.warn('shutdown: error clearing fsMap', e);
     }
     this.#system = null;
     this.#env = null;
     this.#fsMap = null;
-    console.log('[worker] shutdown completed.');
+    console.log('shutdown completed.');
     return { success: true };
   }
 
   // exit: notification -> まず shutdown を順守してから閉じたいならここで await shutdown()
   async exit() {
-    console.log('[worker] exit notification received.');
+    console.log('exit notification received.');
     // LSP の慣習: クライアントが先に shutdown request を呼び、最後に exit notification を送る。
     // ここでは強制的に self.close() を呼ぶ(クライアント実装に依存)
     try {
@@ -95,7 +91,7 @@ class LspServerCore {
       this.#system = system;
       this.#env = env;
 
-      console.log('[worker] vfs boot completed. TypeScript version:', ts.version);
+      console.log('vfs boot completed. TypeScript version:', ts.version);
       return env;
     })();
 
@@ -140,7 +136,7 @@ class LSPWorker {
     } catch (e) {
       // Parse error -> JSON-RPC の仕様に従い id があればエラー応答
       const raw = event.data;
-      console.warn('[worker] invalid message (not JSON):', raw);
+      console.warn('invalid message (not JSON):', raw);
       // もし id を含む文字列だったら parse error を返す。ここでは文字列かつ parse 失敗なので応答しないのも選択肢
       return;
     }
@@ -149,7 +145,7 @@ class LSPWorker {
     // 我々は主に request/notification を受ける想定なので、'method' の有無で振り分ける
     if (!('method' in msg)) {
       // ここに response が来るべきではない。その場合はログのみ。
-      console.warn('[worker] received message without method (ignored):', msg);
+      console.warn('received message without method (ignored):', msg);
       return;
     }
 
@@ -194,7 +190,7 @@ class LSPWorker {
         console.warn(`[worker] notify handler error in ${method}:`, e);
       }
     } else {
-      console.log('[worker notify] unknown method:', method, params ?? '(no params)');
+      console.log('[notify] unknown method:', method, params ?? '(no params)');
     }
   }
 }
