@@ -25,6 +25,7 @@ class LspServerCore {
   #system = null;   // vfs system
   #env = null;      // createVirtualTypeScriptEnvironment の戻り(言語サービス等を含む)
   #bootPromise = null;
+  #openFiles = new Map();
 
   constructor() {
   }
@@ -34,7 +35,18 @@ class LspServerCore {
   // initialize: VFS を初期化して capabilities を返す
   async initialize() {
     await this.#bootVfs();
-    return { capabilities: { completionProvider: { resolveProvider: true } } };
+    
+    return {
+      capabilities: {
+        textDocumentSync: 1, // None | Full | Incremental (1 = Full)
+        completionProvider: { resolveProvider: true },
+      },
+      serverInfo: {
+        name: 'ExampleLSP',
+        version: '0.1.0',
+      },
+    };
+    
   }
 
   async initialized() {
@@ -69,6 +81,35 @@ class LspServerCore {
       // optionally await this.shutdown(); // もし自動 cleanup が望ましければ有効にする
     } catch (e) {}
     self.close();
+  }
+  
+  
+  
+
+  /** didOpen - 仕様準拠: クライアントから送られる通知 */
+  async didOpen(params) {
+    const doc = params?.textDocument;
+    if (!doc?.uri || typeof doc.text !== 'string') return;
+    this.#openFiles.set(doc.uri, doc.text);
+    console.log('didOpen:', doc.uri);
+  }
+  
+  /** textDocument/completion - 仮実装(仕様準拠構造) */
+  async completion(params) {
+    const uri = params?.textDocument?.uri;
+    const position = params?.position;
+    if (!uri || !this.#openFiles.has(uri)) {
+      return { isIncomplete: false, items: [] };
+    }
+  
+    // 仮補完候補(仕様に準拠した CompletionItem 構造)
+    const items = [
+      { label: 'log', kind: 2, detail: 'console.log', insertText: 'log()' },
+      { label: 'error', kind: 2, detail: 'console.error', insertText: 'error()' },
+      { label: 'dir', kind: 2, detail: 'console.dir', insertText: 'dir()' },
+    ];
+  
+    return { isIncomplete: false, items };
   }
 
   /**
@@ -122,7 +163,8 @@ class LSPWorker {
       shutdown: this.#core.shutdown.bind(this.#core),
       exit: this.#core.exit.bind(this.#core),
       ping: this.#core.ping.bind(this.#core),
-      // 'textDocument/didOpen': this.#core.didOpen.bind(this.#core), // 例
+      'textDocument/didOpen': this.#core.didOpen.bind(this.#core),
+      'textDocument/completion': this.#core.completion.bind(this.#core),
     };
 
     self.onmessage = (event) => this.#handleMessage(event);
