@@ -160,6 +160,8 @@ export function createWorkerRpc(workerPath, options = {}) {
     shutdown: (params) => client.send('shutdown', params),
     exit: (params) => client.notify('exit', params),
     ping: (params) => client.send('ping', params),
+    send: client.send.bind(client),
+    notify: client.notify.bind(client),
 
   };
 }
