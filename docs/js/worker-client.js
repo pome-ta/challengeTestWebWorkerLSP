@@ -61,7 +61,9 @@ export class WorkerClient {
       this.#pending.set(id, { resolve, reject, timeoutId });
       try {
         this.#worker.postMessage(raw);
-        if (this.#debug) console.debug('[WorkerClient] sent', raw);
+        if (this.#debug) {
+          console.debug('[WorkerClient] sent', raw);
+        }
       } catch (e) {
         if (timeoutId) clearTimeout(timeoutId);
         this.#pending.delete(id);
@@ -103,8 +105,9 @@ export class WorkerClient {
    */
   #onMessage(event) {
     const raw = event.data;
-    if (this.#debug)
+    if (this.#debug) {
       console.debug('[WorkerClient] onmessage typeof', typeof raw, raw);
+    }
 
     let msg;
     try {

@@ -9,7 +9,9 @@ import ts from 'https://esm.sh/typescript';
 const DEBUG_MODE = true; // true にすると verbose log 出力
 
 function log(...args) {
-  if (DEBUG_MODE) console.log('[worker]', ...args);
+  if (DEBUG_MODE) {
+    console.log('[worker]', ...args);
+  }
 }
 
 /* --- util --- */
@@ -112,8 +114,12 @@ class LspServerCore {
   }
 
   async #bootVfs() {
-    if (this.#env) return;
-    if (this.#bootPromise) return this.#bootPromise;
+    if (this.#env) {
+      return;
+    }
+    if (this.#bootPromise) {
+      return this.#bootPromise;
+    }
     this.#bootPromise = (async () => {
       const defaultMap = await vfs.createDefaultMapFromCDN(
         { target: ts.ScriptTarget.ES2020 },
