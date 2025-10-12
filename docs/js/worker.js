@@ -8,13 +8,25 @@ import ts from 'https://esm.sh/typescript';
 
 const DEBUG_MODE = true; // true にすると verbose log 出力
 
-function log(...args) { if (DEBUG_MODE) console.log('[worker]', ...args); }
+function log(...args) {
+  if (DEBUG_MODE) console.log('[worker]', ...args);
+}
 
 /* --- util --- */
 
+/**
+ * _send(obj)
+ * - main 側が文字列を期待するケースがあるため Transport 側で調整する。
+ * - Worker 側はオブジェクト（構造化クローン）で送ることに統一する（高速で安全）。
+ */
 function _send(obj) {
-  try { self.postMessage(JSON.stringify(obj)); }
-  catch { self.postMessage(obj); }
+  try {
+    // オブジェクトをそのまま postMessage する（structured clone）
+    self.postMessage(obj);
+  } catch (e) {
+    // stringify fallback はやめる：受け側で対応する方が安全（双方向の一貫性を保つため）
+    console.error('[worker] _send failed to postMessage', e, obj);
+  }
 }
 
 function posToOffset(text, pos) {
@@ -33,21 +45,37 @@ function offsetToPos(text, offset) {
 }
 
 function displayPartsToString(parts) {
-  return parts?.map(p => p.text).join('') ?? '';
+  return parts?.map((p) => p.text).join('') ?? '';
 }
 
 function mapTsKindToLsp(tsKind) {
   const map = {
-    method: 2, function: 3, constructor: 4, field: 5, variable: 6, class: 7,
-    interface: 8, module: 9, property: 10, unit: 11, value: 12, enum: 13,
-    keyword: 14, snippet: 15, text: 1,
+    method: 2,
+    function: 3,
+    constructor: 4,
+    field: 5,
+    variable: 6,
+    class: 7,
+    interface: 8,
+    module: 9,
+    property: 10,
+    unit: 11,
+    value: 12,
+    enum: 13,
+    keyword: 14,
+    snippet: 15,
+    text: 1,
   };
   return map[tsKind?.toLowerCase?.()] ?? 6;
 }
 
 /* ---  LspServerCore --- */
 class LspServerCore {
-  #defaultMap; #system; #env; #bootPromise; #openFiles = new Map();
+  #defaultMap;
+  #system;
+  #env;
+  #bootPromise;
+  #openFiles = new Map();
 
   async initialize() {
     await this.#bootVfs();
@@ -56,38 +84,58 @@ class LspServerCore {
         textDocumentSync: 1,
         completionProvider: { resolveProvider: true },
       },
-      serverInfo: { name: 'ts-vfs-worker', version: ts.version ?? 'unknown' }
+      serverInfo: { name: 'ts-vfs-worker', version: ts.version ?? 'unknown' },
     };
   }
 
-  async initialized() { log('initialized'); }
+  async initialized() {
+    log('initialized');
+  }
 
-  async ping(params) { return { echoed: params?.msg ?? '(no message)' }; }
+  async ping(params) {
+    return { echoed: params?.msg ?? '(no message)' };
+  }
 
   async shutdown() {
-    try { this.#defaultMap?.clear?.(); } catch {}
+    try {
+      this.#defaultMap?.clear?.();
+    } catch {}
     this.#system = this.#env = this.#defaultMap = null;
     this.#openFiles.clear();
     log('shutdown completed');
     return { success: true };
   }
 
-  async exit() { log('exit received'); self.close(); }
+  async exit() {
+    log('exit received');
+    self.close();
+  }
 
   async #bootVfs() {
     if (this.#env) return;
     if (this.#bootPromise) return this.#bootPromise;
     this.#bootPromise = (async () => {
       const defaultMap = await vfs.createDefaultMapFromCDN(
-        { target: ts.ScriptTarget.ES2020 }, ts.version, false, ts
+        { target: ts.ScriptTarget.ES2020 },
+        ts.version,
+        false,
+        ts
       );
       const system = vfs.createSystem(defaultMap);
-      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, { allowJs: true });
-      this.#defaultMap = defaultMap; this.#system = system; this.#env = env;
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, {
+        allowJs: true,
+      });
+      this.#defaultMap = defaultMap;
+      this.#system = system;
+      this.#env = env;
       log('vfs booted (ts:', ts.version, ')');
       return env;
     })();
-    try { return await this.#bootPromise; } finally { this.#bootPromise = null; }
+    try {
+      return await this.#bootPromise;
+    } finally {
+      this.#bootPromise = null;
+    }
   }
 
   async 'textDocument/didOpen'(params) {
@@ -96,7 +144,11 @@ class LspServerCore {
     await this.#bootVfs();
     const path = this.#uriToPath(td.uri);
     this.#openFiles.set(td.uri, { text: td.text, version: td.version ?? 1 });
-    try { this.#env.createFile(path, td.text); } catch { this.#env.updateFile(path, td.text); }
+    try {
+      this.#env.createFile(path, td.text);
+    } catch {
+      this.#env.updateFile(path, td.text);
+    }
     log('didOpen', td.uri);
   }
 
@@ -109,7 +161,11 @@ class LspServerCore {
     await this.#bootVfs();
     const path = this.#uriToPath(uri);
     this.#openFiles.set(uri, { text });
-    try { this.#env.updateFile(path, text); } catch { this.#env.createFile(path, text); }
+    try {
+      this.#env.updateFile(path, text);
+    } catch {
+      this.#env.createFile(path, text);
+    }
   }
 
   async 'textDocument/completion'(params) {
@@ -120,12 +176,20 @@ class LspServerCore {
     await this.#bootVfs();
     const path = this.#uriToPath(uri);
     const doc = this.#openFiles.get(uri);
-    const offset = posToOffset(doc?.text ?? '', params?.position ?? { line: 0, character: 0 });
+    const offset = posToOffset(
+      doc?.text ?? '',
+      params?.position ?? { line: 0, character: 0 }
+    );
     try {
-      const completions = this.#env.languageService.getCompletionsAtPosition(path, offset, {});
-      const items = (completions?.entries ?? []).map(e => ({
-        label: e.name, kind: mapTsKindToLsp(e.kind),
-        data: { path, offset, name: e.name }
+      const completions = this.#env.languageService.getCompletionsAtPosition(
+        path,
+        offset,
+        {}
+      );
+      const items = (completions?.entries ?? []).map((e) => ({
+        label: e.name,
+        kind: mapTsKindToLsp(e.kind),
+        data: { path, offset, name: e.name },
       }));
       return { isIncomplete: !!completions?.isIncomplete, items };
     } catch (e) {
@@ -140,12 +204,18 @@ class LspServerCore {
       return item;
     }
     await this.#bootVfs();
-    const d = this.#env.languageService.getCompletionEntryDetails(data.path, data.offset, data.name, undefined, undefined);
+    const d = this.#env.languageService.getCompletionEntryDetails(
+      data.path,
+      data.offset,
+      data.name,
+      undefined,
+      undefined
+    );
     return Object.assign({}, item, {
       detail: displayPartsToString(d?.displayParts),
       documentation: displayPartsToString(d?.documentation),
       insertText: d?.insertText ?? item.label,
-      kind: mapTsKindToLsp(d?.kind ?? item.kind)
+      kind: mapTsKindToLsp(d?.kind ?? item.kind),
     });
   }
 
@@ -159,13 +229,22 @@ class LspServerCore {
     const content = this.#openFiles.get(uri)?.text ?? '';
     const all = [
       ...this.#env.languageService.getSyntacticDiagnostics(path),
-      ...this.#env.languageService.getSemanticDiagnostics(path)
+      ...this.#env.languageService.getSemanticDiagnostics(path),
     ];
-    return all.map(d => {
+    return all.map((d) => {
       const r1 = offsetToPos(content, d.start ?? 0);
       const r2 = offsetToPos(content, (d.start ?? 0) + (d.length ?? 0));
-      const msg = typeof d.messageText === 'string' ? d.messageText : JSON.stringify(d.messageText);
-      return { range: { start: r1, end: r2 }, message: msg, severity: d.category === ts.DiagnosticCategory.Error ? 'error' : 'warning', code: d.code };
+      const msg =
+        typeof d.messageText === 'string'
+          ? d.messageText
+          : JSON.stringify(d.messageText);
+      return {
+        range: { start: r1, end: r2 },
+        message: msg,
+        severity:
+          d.category === ts.DiagnosticCategory.Error ? 'error' : 'warning',
+        code: d.code,
+      };
     });
   }
 
@@ -182,7 +261,9 @@ class LSPWorker {
 
   constructor() {
     // LspServerCore のメソッドを自動登録(private 除外)
-    for (const name of Object.getOwnPropertyNames(Object.getPrototypeOf(this.#core))) {
+    for (const name of Object.getOwnPropertyNames(
+      Object.getPrototypeOf(this.#core)
+    )) {
       if (name.startsWith('#')) {
         continue;
       }
@@ -197,10 +278,13 @@ class LSPWorker {
   async #onMessage(event) {
     let msg;
     try {
-      msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-    }
-    catch {
-      return _send({ jsonrpc: '2.0', error: { code: -32700, message: 'Parse error' } }); 
+      msg =
+        typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+    } catch {
+      return _send({
+        jsonrpc: '2.0',
+        error: { code: -32700, message: 'Parse error' },
+      });
     }
 
     const { id, method, params } = msg;
@@ -211,9 +295,12 @@ class LSPWorker {
     const handler = this.#handlers[method];
     if (!handler) {
       if (id !== undefined) {
-        _send({ jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${method}` } });
-      }
-      else {
+        _send({
+          jsonrpc: '2.0',
+          id,
+          error: { code: -32601, message: `Method not found: ${method}` },
+        });
+      } else {
         log('unknown notify', method);
       }
       return;

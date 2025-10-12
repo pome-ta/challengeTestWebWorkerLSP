@@ -40,19 +40,23 @@ export class WorkerClient {
    * @returns {Promise<any>} resolved with result or rejected with {code,message,data?}
    */
   send(method, params = {}, opts = {}) {
-    const timeoutMs = typeof opts.timeoutMs === 'number' ? opts.timeoutMs : 10000; // default 10s
+    const timeoutMs =
+      typeof opts.timeoutMs === 'number' ? opts.timeoutMs : 10000; // default 10s
     const id = this.#nextId++;
     const msg = { jsonrpc: '2.0', id, method, params };
     const raw = JSON.stringify(msg);
 
     return new Promise((resolve, reject) => {
       // タイムアウト管理
-      const timeoutId = timeoutMs > 0 ? setTimeout(() => {
-        if (this.#pending.has(id)) {
-          this.#pending.delete(id);
-          reject({ code: -32000, message: `timeout (${timeoutMs}ms)` });
-        }
-      }, timeoutMs) : null;
+      const timeoutId =
+        timeoutMs > 0
+          ? setTimeout(() => {
+              if (this.#pending.has(id)) {
+                this.#pending.delete(id);
+                reject({ code: -32000, message: `timeout (${timeoutMs}ms)` });
+              }
+            }, timeoutMs)
+          : null;
 
       this.#pending.set(id, { resolve, reject, timeoutId });
       try {
@@ -98,12 +102,9 @@ export class WorkerClient {
    * event.data は文字列(JSON)で来る前提(worker 側が JSON.stringify していること)
    */
   #onMessage(event) {
-
-
-    
-
     const raw = event.data;
-    if (this.#debug) console.debug('[WorkerClient] onmessage typeof', typeof raw, raw);
+    if (this.#debug)
+      console.debug('[WorkerClient] onmessage typeof', typeof raw, raw);
 
     let msg;
     try {
@@ -123,7 +124,7 @@ export class WorkerClient {
     }
 
     // RPC 応答 (id がある)
-    if (msg && ('id' in msg)) {
+    if (msg && 'id' in msg) {
       const pending = this.#pending.get(msg.id);
       if (!pending) {
         console.warn('[WorkerClient] Unknown response id:', msg.id, msg);
@@ -142,7 +143,8 @@ export class WorkerClient {
 
     // その他(notification など)
     // ここでは汎用的には扱わない。必要ならイベント発火機構を追加する。
-    if (this.#debug) console.debug('[WorkerClient] Unhandled worker message:', msg);
+    if (this.#debug)
+      console.debug('[WorkerClient] Unhandled worker message:', msg);
   }
 }
 
@@ -162,7 +164,5 @@ export function createWorkerRpc(workerPath, options = {}) {
     ping: (params) => client.send('ping', params),
     send: client.send.bind(client),
     notify: client.notify.bind(client),
-
   };
 }
-
