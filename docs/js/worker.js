@@ -6,7 +6,7 @@
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
 
-const DEBUG_MODE = false; // true にすると verbose log 出力
+const DEBUG_MODE = true; // true にすると verbose log 出力
 
 function log(...args) { if (DEBUG_MODE) console.log('[worker]', ...args); }
 
