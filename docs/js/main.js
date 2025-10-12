@@ -1,58 +1,44 @@
-import { createWorkerRpc } from './worker-client.js';
+import {EditorState,} from '@codemirror/state';
+import {EditorView} from '@codemirror/view';
+import {typescriptLanguage} from '@codemirror/lang-javascript';
 
-(async () => {
-  const rpc = createWorkerRpc('./js/worker.js');
+import {languageServerExtensions, LSPClient} from '@codemirror/lsp-client';
 
-  console.log('--- LSP initialize ---');
-  const initResult = await rpc.initialize();
-  console.log('initialize result:', initResult);
+import {basicSetup} from 'codemirror';
 
-  rpc.initialized(); // 通知(await 不要)
 
-  console.log('--- Open document ---');
-  const textDocument = {
-    uri: 'file:///test.ts',
-    languageId: 'typescript',
-    version: 1,
-    text: `function greet(name: string) {
-  return 'Hello, ' + name;
-}
 
-gre`
-  };
+const initialCode = `// demo\nconst x = 1;\nconsole.\n`;
 
-  await rpc.send('textDocument/didOpen', { textDocument });
-  console.log('didOpen sent');
 
-  console.log('--- Request completion ---');
-  const completionResult = await rpc.send('textDocument/completion', {
-    textDocument: { uri: textDocument.uri },
-    position: { line: 4, character: 3 } // "gre" の直後
-  });
-  console.log('completion result:', completionResult);
+const customTheme = EditorView.theme(
+  {
+    '&': {
+      fontFamily: 'Consolas, Menlo, Monaco, source-code-pro, Courier New, monospace',
+      fontSize: '0.72rem',
+    },
+  },
+  { dark: false, },
+);
 
-  if (completionResult?.items?.length) {
-    console.log('--- Resolve first completion item ---');
-    const item = completionResult.items[0];
-    const resolved = await rpc.send('completionItem/resolve', item);
-    console.log('resolved item:', resolved);
-  }
+const extensions = [
+  basicSetup,
+  customTheme,
+  typescriptLanguage,
+];
 
-  console.log('--- Diagnostics check ---');
-  const diagnostics = await rpc.send('textDocument/diagnostics', {
-    textDocument: { uri: textDocument.uri }
-  });
-  console.log('diagnostics:', diagnostics);
+const state = EditorState.create({
+  doc: initialCode,
+  extensions: extensions,
+});
 
-  console.log('--- Ping ---');
-  const pingResult = await rpc.send('ping', { msg: 'hello worker' });
-  console.log('ping result:', pingResult);
+const view = new EditorView({
+  state: state,
+  parent: document.body,
+});
 
-  console.log('--- Shutdown ---');
-  const shutdown = await rpc.shutdown();
-  console.log('shutdown result:', shutdown);
 
-  console.log('--- Exit ---');
-  rpc.notify('exit');
-})();
 
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOMContentLoaded');
+});
