@@ -28,6 +28,7 @@ export class WorkerClient {
    */
   constructor(workerPath, options = {}) {
     this.#debug = !!options.debug;
+    console.log(`WorkerClient.debug: ${this.#debug}`);
     this.#worker = new Worker(workerPath, { type: 'module' });
     this.#worker.onmessage = this.#onMessage.bind(this);
   }

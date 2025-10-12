@@ -8,8 +8,8 @@ export async function createWorkerTransport(workerUrl) {
   const handlers = new Set();
 
   // Worker -> Main の受け取り
-  worker.onmessage = (ev) => {
-    const data = ev.data;
+  worker.onmessage = (event) => {
+    const data = event.data;
     // data が文字列ならそのまま。オブジェクトなら JSON.stringify して文字列に変換。
     const json = typeof data === 'string' ? data : JSON.stringify(data);
 
@@ -27,10 +27,13 @@ export async function createWorkerTransport(workerUrl) {
     // LSPClient 側は "message string" を渡す（多くは JSON 文字列）
     send(message) {
       // message が文字列ならそのまま、オブジェクトなら構造化クローンで渡す
+      console.log(`send: ${message}`);
       if (typeof message === 'string') {
+        console.log('t');
         worker.postMessage(message);
       } else {
         // 多くの LSPClient 実装は文字列を send するが、念のためオブジェクトを取る場合にも対応
+        console.log('f');
         worker.postMessage(message);
       }
     },

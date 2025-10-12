@@ -7,15 +7,13 @@ import { basicSetup } from 'codemirror';
 import { autocompletion, startCompletion } from '@codemirror/autocomplete';
 import { createWorkerTransport } from './worker-transport.js';
 
-const customCompletionKeymap = [{ key: 'Ctrl-.', run: startCompletion }];
+const customCompletionKeymap = [{ key: 'Shift-Space', run: startCompletion }];
 
 const transport = await createWorkerTransport('./js/worker.js');
 
 const client = new LSPClient({
   extensions: languageServerExtensions(),
 }).connect(transport);
-
-// console.log(client);
 
 const initialCode = `// demo\nconst x = 1;\nconsole.\n`;
 
