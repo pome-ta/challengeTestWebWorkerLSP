@@ -7,7 +7,9 @@ export async function createWorkerTransport(workerUrl) {
     let data = e.data;
     // Worker 側が JSON 文字列を送る前提（あなたの実装に合致）
     if (typeof data === 'string') {
-      try { data = JSON.parse(data); } catch {}
+      try {
+        data = JSON.parse(data);
+      } catch {}
     }
     for (const h of handlers) h(data);
   };
@@ -16,7 +18,9 @@ export async function createWorkerTransport(workerUrl) {
   return {
     send(message) {
       // codemirror/lsp-client は JSON 文字列を送るのでそのまま渡す
-      worker.postMessage(typeof message === 'string' ? message : JSON.stringify(message));
+      worker.postMessage(
+        typeof message === 'string' ? message : JSON.stringify(message)
+      );
     },
     subscribe(handler) {
       handlers.add(handler);
