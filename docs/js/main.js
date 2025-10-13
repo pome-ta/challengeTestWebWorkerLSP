@@ -4,10 +4,9 @@ import { typescriptLanguage } from '@codemirror/lang-javascript';
 import { languageServerExtensions, LSPClient } from '@codemirror/lsp-client';
 import { basicSetup } from 'codemirror';
 
-import { autocompletion, startCompletion } from '@codemirror/autocomplete';
+import { autocompletion } from '@codemirror/autocomplete';
 import { createWorkerTransport } from './worker-transport.js';
 
-const customCompletionKeymap = [{ key: 'Shift-Space', run: startCompletion }];
 
 const transport = await createWorkerTransport('./js/worker.js');
 
@@ -32,8 +31,7 @@ const extensions = [
   basicSetup,
   customTheme,
   typescriptLanguage,
-  autocompletion(),
-  keymap.of(customCompletionKeymap),
+  autocompletion({ activateOnTyping: true }),
   client.plugin('file:///main.ts'),
 ];
 
