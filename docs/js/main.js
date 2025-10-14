@@ -1,3 +1,4 @@
+// --- main.js
 import { EditorState } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { typescriptLanguage } from '@codemirror/lang-javascript';
@@ -45,19 +46,7 @@ const view = new EditorView({
   parent: document.body,
 });
 
-// (async () => {
-//   const transport = await createWorkerTransport('./js/worker.js');
-//   const client = new LSPClient({ extensions: languageServerExtensions() }).connect(transport);
-//
-//   new EditorView({
-//     extensions: [
-//       basicSetup,
-//       typescriptLanguage,
-//       client.plugin('file:///main.ts'),
-//     ],
-//     parent: document.getElementById('editor'),
-//   });
-// })();
+
 
 document.addEventListener('DOMContentLoaded', () => {
   console.log('DOMContentLoaded');

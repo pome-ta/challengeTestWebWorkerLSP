@@ -15,6 +15,7 @@ export class WorkerTransport {
       const data = event.data;
       const json = typeof data === 'string' ? data : JSON.stringify(data);
 
+      
       this.#handlers.forEach((handler) => {
         try {
           handler(json);
@@ -22,6 +23,8 @@ export class WorkerTransport {
           console.error('[worker-transport] handler error:', err);
         }
       });
+      
+      
     };
 
     this.#worker.onmessageerror = (err) => {
