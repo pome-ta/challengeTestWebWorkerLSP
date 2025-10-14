@@ -8,7 +8,7 @@ import { autocompletion } from '@codemirror/autocomplete';
 import { createWorkerTransport } from './worker-transport.js';
 
 
-const transport = await createWorkerTransport('./js/worker.js');
+const transport = await createWorkerTransport('./js/worker.js', true);
 
 const client = new LSPClient({
   extensions: languageServerExtensions(),

@@ -1,49 +1,78 @@
 // worker-transport.js
-// - createWorkerTransport(workerUrl) -> Promise<Transport>
-// - Transport: { send(message), subscribe(handler), unsubscribe(handler), worker }
+// - LSP Client と Web Worker の間を仲介する Transport クラス
+// - createWorkerTransport(workerUrl) -> Promise<WorkerTransport>
 
-// handler は "文字列"（JSON）で呼ばれることを期待します（codemirror/lsp-client の実装に合わせる）
-export async function createWorkerTransport(workerUrl) {
-  const worker = new Worker(workerUrl, { type: 'module' });
-  const handlers = new Set();
+export class WorkerTransport {
+  #worker;
+  #handlers = new Set();
+  #debug;
 
-  // Worker -> Main の受け取り
-  worker.onmessage = (event) => {
-    const data = event.data;
-    // data が文字列ならそのまま。オブジェクトなら JSON.stringify して文字列に変換。
-    const json = typeof data === 'string' ? data : JSON.stringify(data);
+  constructor(worker, debug = false) {
+    this.#worker = worker;
+    this.#debug = debug;
 
-    // subscribe されたハンドラ全てに文字列を渡す（LSPClient が JSON.parse することを想定）
-    for (const h of handlers) {
-      try {
-        h(json);
-      } catch (e) {
-        console.error('worker-transport handler error', e);
-      }
+    this.#worker.onmessage = (event) => {
+      const data = event.data;
+      const json = typeof data === 'string' ? data : JSON.stringify(data);
+
+      this.#handlers.forEach((handler) => {
+        try {
+          handler(json);
+        } catch (err) {
+          console.error('[worker-transport] handler error:', err);
+        }
+      });
+    };
+
+    this.#worker.onmessageerror = (err) => {
+      console.error('[worker-transport] message error:', err);
+    };
+
+    this.#worker.onerror = (err) => {
+      console.error('[worker-transport] worker error:', err);
+    };
+  }
+
+  send(message) {
+    // 現在の CodeMirror LSPClient は JSON 文字列を送るので stringify 不要
+    this.#worker.postMessage(message);
+
+    if (this.#debug) {
+      console.debug('[worker-transport] sent:', message);
     }
-  };
+  }
 
-  return {
-    // LSPClient 側は "message string" を渡す（多くは JSON 文字列）
-    send(message) {
-      // message が文字列ならそのまま、オブジェクトなら構造化クローンで渡す
-      console.log(`send: ${message}`);
-      if (typeof message === 'string') {
-        console.log('t');
-        worker.postMessage(message);
-      } else {
-        // 多くの LSPClient 実装は文字列を send するが、念のためオブジェクトを取る場合にも対応
-        console.log('f');
-        worker.postMessage(message);
-      }
-    },
-    subscribe(handler) {
-      handlers.add(handler);
-    },
-    unsubscribe(handler) {
-      handlers.delete(handler);
-    },
-    // Worker インスタンスを直接必要とする場合に備えて保持
-    worker,
-  };
+  subscribe(handler) {
+    this.#handlers.add(handler);
+
+    if (this.#debug) {
+      console.debug('[worker-transport] handler subscribed:', handler);
+    }
+  }
+
+  unsubscribe(handler) {
+    this.#handlers.delete(handler);
+
+    if (this.#debug) {
+      console.debug('[worker-transport] handler unsubscribed:', handler);
+    }
+  }
+
+  close() {
+    this.#worker.terminate();
+
+    if (this.#debug) {
+      console.debug('[worker-transport] worker terminated');
+    }
+  }
+
+  get worker() {
+    return this.#worker;
+  }
 }
+
+export async function createWorkerTransport(workerUrl, debug = false) {
+  const worker = new Worker(workerUrl, { type: 'module' });
+  return new WorkerTransport(worker, debug);
+}
+
