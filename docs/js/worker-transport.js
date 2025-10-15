@@ -29,11 +29,9 @@ export async function createWorkerTransport(workerUrl) {
       // message が文字列ならそのまま、オブジェクトなら構造化クローンで渡す
       console.log(`send: ${message}`);
       if (typeof message === 'string') {
-        console.log('t');
         worker.postMessage(message);
       } else {
         // 多くの LSPClient 実装は文字列を send するが、念のためオブジェクトを取る場合にも対応
-        console.log('f');
         worker.postMessage(message);
       }
     },
