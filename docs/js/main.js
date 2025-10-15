@@ -6,7 +6,9 @@ import { typescriptLanguage } from '@codemirror/lang-javascript';
 import { languageServerExtensions, LSPClient } from '@codemirror/lsp-client';
 import { basicSetup } from 'codemirror';
 
-import { createWorkerClient } from './worker-client.js';
+
+import { createWorkerTransport } from './worker-transport.js';
+
 
 // Worker クライアントの初期化
 const workerClient = await createWorkerClient('./js/worker.js', {debug:true});
@@ -56,14 +58,7 @@ await workerClient.initialize({
 workerClient.initialized();
 */
 
-// cleanup on unload
-window.addEventListener('beforeunload', async (ev) => {
-  try {
-    await workerClient.shutdown();
-    workerClient.exit();
-  } catch (e) {
-    // ignore
-  } finally {
-    workerClient.close();
-  }
+
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('DOMContentLoaded');
 });
