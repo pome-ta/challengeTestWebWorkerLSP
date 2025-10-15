@@ -1,3 +1,4 @@
+// --- main.js
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { autocompletion } from '@codemirror/autocomplete';
@@ -9,12 +10,15 @@ import { basicSetup } from 'codemirror';
 import { createWorkerTransport } from './worker-transport.js';
 
 
-const transport = await createWorkerTransport('./js/worker.js');
+// Worker クライアントの初期化
+const workerClient = await createWorkerClient('./js/worker.js', true);
 
+// LSPClient を生成して接続
 const client = new LSPClient({
   extensions: languageServerExtensions(),
-}).connect(transport);
+}).connect(workerClient.transport);
 
+// Editor 設定
 const initialCode = `// demo\nconst x = 1;\nconsole.\n`;
 
 const customTheme = EditorView.theme(
@@ -38,13 +42,21 @@ const extensions = [
 
 const state = EditorState.create({
   doc: initialCode,
-  extensions: extensions,
+  extensions,
 });
 
 const view = new EditorView({
-  state: state,
+  state,
   parent: document.body,
 });
+/*
+// LSP ライフサイクル
+await workerClient.initialize({
+  rootUri: 'file:///',
+  capabilities: {},
+});
+workerClient.initialized();
+*/
 
 
 document.addEventListener('DOMContentLoaded', () => {

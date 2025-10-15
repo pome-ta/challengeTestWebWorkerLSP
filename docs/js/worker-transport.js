@@ -1,25 +1,55 @@
 // worker-transport.js
-// - createWorkerTransport(workerUrl) -> Promise<Transport>
-// - Transport: { send(message), subscribe(handler), unsubscribe(handler), worker }
+// - LSP Client と Web Worker の間を仲介する Transport クラス
+// - createWorkerTransport(workerUrl) -> Promise<WorkerTransport>
 
-// handler は "文字列"（JSON）で呼ばれることを期待します（codemirror/lsp-client の実装に合わせる）
-export async function createWorkerTransport(workerUrl) {
-  const worker = new Worker(workerUrl, { type: 'module' });
-  const handlers = new Set();
+export class WorkerTransport {
+  #worker;
+  #handlers = new Set();
+  #debug;
 
-  // Worker -> Main の受け取り
-  worker.onmessage = (event) => {
-    const data = event.data;
-    // data が文字列ならそのまま。オブジェクトなら JSON.stringify して文字列に変換。
-    const json = typeof data === 'string' ? data : JSON.stringify(data);
+  constructor(worker, debug = false) {
+    this.#worker = worker;
+    this.#debug = debug;
 
-    // subscribe されたハンドラ全てに文字列を渡す（LSPClient が JSON.parse することを想定）
-    for (const h of handlers) {
-      try {
-        h(json);
-      } catch (e) {
-        console.error('worker-transport handler error', e);
-      }
+    this.#worker.onmessage = (event) => {
+      const data = event.data;
+      const json = typeof data === 'string' ? data : JSON.stringify(data);
+
+      
+      this.#handlers.forEach((handler) => {
+        try {
+          handler(json);
+        } catch (err) {
+          console.error('[worker-transport] handler error:', err);
+        }
+      });
+      
+      
+    };
+
+    this.#worker.onmessageerror = (err) => {
+      console.error('[worker-transport] message error:', err);
+    };
+
+    this.#worker.onerror = (err) => {
+      console.error('[worker-transport] worker error:', err);
+    };
+  }
+
+  send(message) {
+    // 現在の CodeMirror LSPClient は JSON 文字列を送るので stringify 不要
+    this.#worker.postMessage(message);
+
+    if (this.#debug) {
+      console.debug('[worker-transport] sent:', message);
+    }
+  }
+
+  subscribe(handler) {
+    this.#handlers.add(handler);
+
+    if (this.#debug) {
+      console.debug('[worker-transport] handler subscribed:', handler);
     }
   };
 
@@ -45,3 +75,9 @@ export async function createWorkerTransport(workerUrl) {
     worker,
   };
 }
+
+export async function createWorkerTransport(workerUrl, debug = false) {
+  const worker = new Worker(workerUrl, { type: 'module' });
+  return new WorkerTransport(worker, debug);
+}
+
