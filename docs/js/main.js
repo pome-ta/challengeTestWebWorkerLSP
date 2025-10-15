@@ -1,10 +1,11 @@
 // --- main.js
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
+import { autocompletion } from '@codemirror/autocomplete';
 import { typescriptLanguage } from '@codemirror/lang-javascript';
 import { languageServerExtensions, LSPClient } from '@codemirror/lsp-client';
 import { basicSetup } from 'codemirror';
-import { autocompletion } from '@codemirror/autocomplete';
+
 import { createWorkerClient } from './worker-client.js';
 
 // Worker クライアントの初期化
@@ -54,8 +55,15 @@ await workerClient.initialize({
 });
 workerClient.initialized();
 */
-// 終了処理
-window.addEventListener('beforeunload', async () => {
-  await workerClient.shutdown();
-  workerClient.exit();
+
+// cleanup on unload
+window.addEventListener('beforeunload', async (ev) => {
+  try {
+    await workerClient.shutdown();
+    workerClient.exit();
+  } catch (e) {
+    // ignore
+  } finally {
+    workerClient.close();
+  }
 });
