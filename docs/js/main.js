@@ -1,20 +1,21 @@
 // --- main.js
 import { EditorState } from '@codemirror/state';
-import { EditorView, keymap } from '@codemirror/view';
+import { EditorView } from '@codemirror/view';
 import { typescriptLanguage } from '@codemirror/lang-javascript';
 import { languageServerExtensions, LSPClient } from '@codemirror/lsp-client';
 import { basicSetup } from 'codemirror';
-
 import { autocompletion } from '@codemirror/autocomplete';
-import { createWorkerTransport } from './worker-transport.js';
+import { createWorkerClient } from './worker-client.js';
 
+// Worker クライアントの初期化
+const workerClient = await createWorkerClient('./js/worker.js', true);
 
-const transport = await createWorkerTransport('./js/worker.js', true);
-
+// LSPClient を生成して接続
 const client = new LSPClient({
   extensions: languageServerExtensions(),
-}).connect(transport);
+}).connect(workerClient.transport);
 
+// Editor 設定
 const initialCode = `// demo\nconst x = 1;\nconsole.\n`;
 
 const customTheme = EditorView.theme(
@@ -38,16 +39,23 @@ const extensions = [
 
 const state = EditorState.create({
   doc: initialCode,
-  extensions: extensions,
+  extensions,
 });
 
 const view = new EditorView({
-  state: state,
+  state,
   parent: document.body,
 });
-
-
-
-document.addEventListener('DOMContentLoaded', () => {
-  console.log('DOMContentLoaded');
+/*
+// LSP ライフサイクル
+await workerClient.initialize({
+  rootUri: 'file:///',
+  capabilities: {},
+});
+workerClient.initialized();
+*/
+// 終了処理
+window.addEventListener('beforeunload', async () => {
+  await workerClient.shutdown();
+  workerClient.exit();
 });
