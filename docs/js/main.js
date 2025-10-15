@@ -9,7 +9,7 @@ import { basicSetup } from 'codemirror';
 import { createWorkerClient } from './worker-client.js';
 
 // Worker クライアントの初期化
-const workerClient = await createWorkerClient('./js/worker.js', true);
+const workerClient = await createWorkerClient('./js/worker.js', {debug:true});
 
 // LSPClient を生成して接続
 const client = new LSPClient({
