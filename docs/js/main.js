@@ -1,4 +1,4 @@
-// --- main.js
+// --- main.js v0.1
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { autocompletion } from '@codemirror/autocomplete';
@@ -47,14 +47,7 @@ const view = new EditorView({
   state,
   parent: document.body,
 });
-/*
-// LSP ライフサイクル
-await workerClient.initialize({
-  rootUri: 'file:///',
-  capabilities: {},
-});
-workerClient.initialized();
-*/
+
 
 // cleanup on unload
 window.addEventListener('beforeunload', async (ev) => {

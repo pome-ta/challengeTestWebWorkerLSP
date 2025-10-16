@@ -1,4 +1,4 @@
-// worker-client.js
+// worker-client.js v0.1
 // Worker(JSON-RPC風) とやり取りする簡易クライアントラッパー。
 // - createWorkerClient(workerUrl, options) を呼ぶと Promise で準備済みインスタンスを返す
 // - インスタンスは .transport (LSPClient に渡す Transport) を持ち、

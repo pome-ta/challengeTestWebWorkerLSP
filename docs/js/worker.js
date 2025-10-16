@@ -1,4 +1,4 @@
-// worker.js
+// worker.js v0.1
 // Minimal LSP Worker (TypeScript + @typescript/vfs)
 // ESM module
 // 現段階では console 転送を main に送らない(パフォーマンス優先)
