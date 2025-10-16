@@ -18,15 +18,15 @@ function log(...args) {
 
 /**
  * _send(obj)
- * - main 側が文字列を期待するケースがあるため Transport 側で調整する。
- * - Worker 側はオブジェクト（構造化クローン）で送ることに統一する（高速で安全）。
+ * - main 側が文字列を期待するケースがあるため Transport 側で調整する。
+ * - Worker 側はオブジェクト(構造化クローン)で送ることに統一する(高速で安全)。
  */
 function _send(obj) {
   try {
-    // オブジェクトをそのまま postMessage する（structured clone）
+    // オブジェクトをそのまま postMessage する(structured clone)
     self.postMessage(obj);
   } catch (e) {
-    // stringify fallback はやめる：受け側で対応する方が安全（双方向の一貫性を保つため）
+    // stringify fallback はやめる:受け側で対応する方が安全(双方向の一貫性を保つため)
     console.error('[worker] _send failed to postMessage', e, obj);
   }
 }
@@ -327,3 +327,4 @@ class LSPWorker {
 }
 
 new LSPWorker();
+

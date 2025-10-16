@@ -82,120 +82,100 @@ class WorkerClientImpl {
    * @param {string} method
    * @param {any} params
    * @param {{ timeoutMs?: number }} opts
-   * @returns {Promise<any>} result または reject(error)
+   * @returns {Promise<any>}
    */
-  send(method, params = {}, opts = {}) {
-    const timeoutMs = typeof opts.timeoutMs === 'number' ? opts.timeoutMs : 10000;
+  send(method, params, opts = {}) {
     const id = this.#seq++;
-
     const msg = { jsonrpc: '2.0', id, method, params };
     const raw = JSON.stringify(msg);
+    const timeoutMs = opts.timeoutMs ?? 10000;
 
     return new Promise((resolve, reject) => {
-      // タイムアウト設定
-      const timeoutId = timeoutMs > 0 ? setTimeout(() => {
-        if (this.#pending.has(id)) {
-          this.#pending.delete(id);
-          reject({ code: -32000, message: `timeout (${timeoutMs}ms)` });
-        }
-      }, timeoutMs) : null;
+      const timeoutId = setTimeout(() => {
+        this.#pending.delete(id);
+        reject(new Error(`WorkerClient timeout: ${method}`));
+      }, timeoutMs);
 
       this.#pending.set(id, { resolve, reject, timeoutId });
-
       try {
-        // transport.send は文字列 (JSON) を期待する設計
         this.#transport.send(raw);
-        if (this.#debug) console.debug('[WorkerClient] sent', raw);
       } catch (e) {
-        if (timeoutId) clearTimeout(timeoutId);
+        clearTimeout(timeoutId);
         this.#pending.delete(id);
-        reject({ code: -32000, message: 'postMessage failed: ' + String(e) });
+        reject(e);
       }
     });
   }
 
   /**
-   * notify - JSON-RPC notification (id なし)
+   * notify - JSON-RPC 通知(応答なし)
    * @param {string} method
    * @param {any} params
    */
-  notify(method, params = {}) {
+  notify(method, params) {
     const msg = { jsonrpc: '2.0', method, params };
     try {
       this.#transport.send(JSON.stringify(msg));
-      if (this.#debug) console.debug('[WorkerClient] notify sent', msg);
     } catch (e) {
-      console.warn('[WorkerClient] notify failed', e);
+      if (this.#debug) console.warn('[WorkerClient] notify send failed:', e);
     }
   }
 
   /**
-   * close - クライアントをクローズ (transport unsubscribe + close)
+   * 基本的な LSP Lifecycle メソッド群
+   */
+  async initialize(params = {}) {
+    return await this.send('initialize', params);
+  }
+
+  initialized() {
+    this.notify('initialized', {});
+  }
+
+  async shutdown() {
+    return await this.send('shutdown', {});
+  }
+
+  exit() {
+    this.notify('exit', {});
+  }
+
+  async ping(msg = 'ping') {
+    return await this.send('ping', { msg });
+  }
+
+  /**
+   * Transport を閉じる
    */
   close() {
     try {
       this.#transport.unsubscribe(this.#messageHandler);
+      this.#transport.close?.();
     } catch (e) {
-      if (this.#debug) console.warn('[WorkerClient] unsubscribe failed', e);
+      if (this.#debug) console.warn('[WorkerClient] close failed:', e);
     }
-    try {
-      if (typeof this.#transport.close === 'function') this.#transport.close();
-    } catch (e) {
-      if (this.#debug) console.warn('[WorkerClient] transport close failed', e);
-    }
+  }
+
+  get transport() {
+    return this.#transport;
   }
 }
 
 /**
- * createWorkerClient - ファクトリ関数
- * - 内部で createWorkerTransport を呼び transport を得る
- * - WorkerClient インスタンスを返す
- *
- * @param {string} workerUrl - Worker スクリプトの URL/相対パス
+ * createWorkerClient(workerUrl, options)
+ * @param {string} workerUrl
  * @param {{ debug?: boolean }} options
- * @returns {Promise<{ client: WorkerClientImpl, transport: any,
- *   initialize: (p)=>Promise, initialized:(p)=>void, shutdown:()=>Promise, exit:()=>void, ping:(p)=>Promise }>}
+ * @returns {Promise<WorkerClientImpl>}
  */
 export async function createWorkerClient(workerUrl, options = {}) {
   const { debug = false } = options;
-  // createWorkerTransport は worker-transport.js 側で定義されている想定
   const transport = await createWorkerTransport(workerUrl, debug);
-
   const client = new WorkerClientImpl({ transport, debug });
 
-  // ラッパー: LSP の常用メソッド
-  const wrapper = {
-    client,
-    transport,
-    /**
-     * initialize request (awaitable)
-     * @param {object} params
-     */
-    initialize: (params = {}) => client.send('initialize', params),
-    /**
-     * initialized notification (no-wait)
-     * @param {object} params
-     */
-    initialized: (params = {}) => client.notify('initialized', params),
-    /**
-     * shutdown request (awaitable)
-     */
-    shutdown: (params = {}) => client.send('shutdown', params),
-    /**
-     * exit notification (no-wait)
-     */
-    exit: (params = {}) => client.notify('exit', params),
-    /**
-     * ping (request)
-     */
-    ping: (params = {}) => client.send('ping', params),
-    /**
-     * close - internal cleanup. 呼び出すと transport を閉じる
-     */
-    close: () => client.close(),
-  };
+  // Worker 側初期化シーケンス
+  await client.initialize({ processId: 1, rootUri: 'file:///' });
+  client.initialized();
 
-  if (debug) console.debug('[createWorkerClient] ready', { workerUrl, transport });
-
-  return wrapper;
+  if (debug) console.debug('[createWorkerClient] initialized');
+  return client;
 }
