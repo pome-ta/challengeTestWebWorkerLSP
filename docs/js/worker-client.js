@@ -139,9 +139,6 @@ export async function createWorkerClient(workerUrl, options = {}) {
   const transport = await createWorkerTransport(workerUrl, debug);
   const client = new WorkerClientImpl({ transport, debug });
 
-  await client.initialize({ processId: 1, rootUri: 'file:///' });
-  client.initialized();
-
   if (debug) console.debug('[createWorkerClient] initialized');
   return client;
 }
