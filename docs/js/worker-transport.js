@@ -15,7 +15,6 @@ export class WorkerTransport {
       const data = event.data;
       const json = typeof data === 'string' ? data : JSON.stringify(data);
 
-      
       this.#handlers.forEach((handler) => {
         try {
           handler(json);
@@ -23,8 +22,6 @@ export class WorkerTransport {
           console.error('[worker-transport] handler error:', err);
         }
       });
-      
-      
     };
 
     this.#worker.onmessageerror = (err) => {
@@ -37,7 +34,6 @@ export class WorkerTransport {
   }
 
   send(message) {
-    // 現在の CodeMirror LSPClient は JSON 文字列を送るので stringify 不要
     this.#worker.postMessage(message);
 
     if (this.#debug) {
@@ -78,4 +74,3 @@ export async function createWorkerTransport(workerUrl, debug = false) {
   const worker = new Worker(workerUrl, { type: 'module' });
   return new WorkerTransport(worker, debug);
 }
-

@@ -60,4 +60,3 @@ window.addEventListener('beforeunload', async (ev) => {
     workerClient.close();
   }
 });
-
