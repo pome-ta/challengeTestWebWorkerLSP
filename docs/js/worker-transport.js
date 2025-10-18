@@ -38,13 +38,27 @@ class WorkerTransport {
   }
 
   send(message) {
+    // LSPClient が送るような JSON 文字列の場合、パースしてオブジェクトとして送信する
+    // ことで、Worker 側は常に効率的な構造化クローンを利用できる。
+    if (typeof message === 'string') {
+      try {
+        const obj = JSON.parse(message);
+        this.#worker.postMessage(obj);
+        if (this.#debug) console.debug('[worker-transport] sent (parsed object):', obj);
+        return;
+      } catch {
+        // JSONではない文字列の場合はそのまま送信
+      }
+    }
+
+    // オブジェクトはそのまま送信
     try {
       this.#worker.postMessage(message);
       if (this.#debug) {
         console.debug('[worker-transport] sent:', message);
       }
     } catch (e) {
-      console.error('[worker-transport] send failed:', e, message);
+      console.error('[worker-transport] postMessage failed:', e, message);
     }
   }
 

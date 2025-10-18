@@ -113,14 +113,15 @@ class WorkerClientImpl {
   }
 
   close() {
-    try {
-      // Reject all pending promises
-      for (const [id, pend] of this.#pending.entries()) {
-        if (pend.timeoutId) clearTimeout(pend.timeoutId);
-        pend.reject({ code: -32001, message: 'WorkerClient closed' });
-      }
-      this.#pending.clear();
+    // 保留中のすべてのリクエストを reject してリソースリークを防ぐ
+    for (const [id, pend] of this.#pending.entries()) {
+      if (pend.timeoutId) clearTimeout(pend.timeoutId);
+      // エラーコード -32001 は独自定義: Client is closing
+      pend.reject({ code: -32001, message: 'WorkerClient is closing.' });
+    }
+    this.#pending.clear();
 
+    try {
       this.#transport.unsubscribe(this.#messageHandler);
       this.#transport.close?.();
     } catch (e) {
