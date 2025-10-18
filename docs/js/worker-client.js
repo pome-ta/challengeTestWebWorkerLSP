@@ -1,4 +1,4 @@
-// worker-client.js v0.1.1
+// worker-client.js v0.2
 // Worker(JSON-RPC風) とやり取りする簡易クライアントラッパー。
 
 import { createWorkerTransport } from './worker-transport.js';
@@ -25,36 +25,49 @@ class WorkerClientImpl {
    */
   #onMessage(raw) {
     if (this.#debug) console.debug('[WorkerClient] onmessage raw:', raw);
+  
     let msg;
     try {
       msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
     } catch (e) {
-      console.warn('[WorkerClient] failed to parse worker message:', raw);
+      if (this.#debug) console.warn('[WorkerClient] failed to parse worker message:', raw);
       return;
     }
-
-    // --- JSON-RPC 応答(idあり)---
-    if (msg && 'id' in msg) {
-      const pend = this.#pending.get(msg.id);
-      if (!pend) {
-        if (this.#debug) console.warn('[WorkerClient] unknown response id:', msg.id, msg);
+  
+    // JSON-RPC: message with id -> only care about our own namespaced ids (strings starting with 'wc:')
+    if (msg && ('id' in msg)) {
+      const id = msg.id;
+      // we only handle responses for ids we issued (our ids are strings like 'wc:1')
+      if (typeof id === 'string' && id.startsWith('wc:')) {
+        const pend = this.#pending.get(id);
+        if (!pend) {
+          // Unexpected: our id but no pending entry. Log at debug level.
+          if (this.#debug) console.warn('[WorkerClient] response for unknown own id:', id, msg);
+          return;
+        }
+        // clear timeout and resolve/reject
+        if (pend.timeoutId) clearTimeout(pend.timeoutId);
+        this.#pending.delete(id);
+        if ('error' in msg && msg.error) pend.reject(msg.error);
+        else pend.resolve(msg.result);
         return;
       }
-
-      // タイムアウトクリア
-      if (pend.timeoutId) clearTimeout(pend.timeoutId);
-      this.#pending.delete(msg.id);
-
-      if ('error' in msg && msg.error) {
-        pend.reject(msg.error);
-      } else {
-        pend.resolve(msg.result);
+      // Not our id — this is another client (e.g. codemirror's LSPClient). Ignore silently.
+      if (this.#debug) {
+        console.debug('[WorkerClient] ignoring response for external id:', msg.id);
       }
       return;
     }
-
-    // --- 通知(idなし)---
-    if (this.#debug) console.debug('[WorkerClient] unhandled message (notification?):', msg);
+  
+    // Notifications or other messages (no id)
+    if (msg && msg.method) {
+      // Optionally handle notifications you care about here (e.g. server-initiated)
+      if (this.#debug) {
+        console.debug('[WorkerClient] notification received (ignored):', msg.method, msg.params ?? null);
+      }
+    } else {
+      if (this.#debug) console.debug('[WorkerClient] received unknown message shape:', msg);
+    }
   }
 
   /**
@@ -64,29 +77,35 @@ class WorkerClientImpl {
    * @param {{ timeoutMs?: number }} opts
    * @returns {Promise<any>}
    */
-  send(method, params, opts = {}) {
-    const id = this.#seq++;
+  send(method, params = {}, opts = {}) {
+    const timeoutMs = typeof opts.timeoutMs === 'number' ? opts.timeoutMs : 10000;
+  
+    // Use string id with namespace to avoid colliding with other JSON-RPC clients that use numeric ids.
+    const id = `wc:${this.#seq++}`;
+  
     const msg = { jsonrpc: '2.0', id, method, params };
     const raw = JSON.stringify(msg);
-    const timeoutMs = opts.timeoutMs ?? 10000;
-
+  
     return new Promise((resolve, reject) => {
-      // --- タイムアウト設定 ---
-      const timeoutId = setTimeout(() => {
-        this.#pending.delete(id);
-        reject(new Error(`WorkerClient timeout: ${method}`));
-      }, timeoutMs);
-
-      // --- 保留中リクエストに登録 ---
+      // Set timeout
+      const timeoutId = timeoutMs > 0 ? setTimeout(() => {
+        if (this.#pending.has(id)) {
+          this.#pending.delete(id);
+          reject({ code: -32000, message: `timeout (${timeoutMs}ms)` });
+        }
+      }, timeoutMs) : null;
+  
+      // Store pending
       this.#pending.set(id, { resolve, reject, timeoutId });
-
-      // --- 実送信 ---
+  
+      // Send via transport. Transport expects a string (lsp-client convention), but is robust.
       try {
         this.#transport.send(raw);
+        if (this.#debug) console.debug('[WorkerClient] sent', { id, method, params });
       } catch (e) {
-        clearTimeout(timeoutId);
+        if (timeoutId) clearTimeout(timeoutId);
         this.#pending.delete(id);
-        reject(e);
+        reject({ code: -32000, message: 'send failed: ' + String(e) });
       }
     });
   }
