@@ -1,4 +1,4 @@
-// worker-client.js v0.2
+// worker-client.js v0.3
 // Worker(JSON-RPC風) とやり取りする簡易クライアントラッパー。
 
 import { createWorkerTransport, LSPTransportAdapter } from './worker-transport.js';
