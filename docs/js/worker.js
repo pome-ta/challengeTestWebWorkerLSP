@@ -33,11 +33,14 @@ function _send(obj) {
 
 function posToOffset(text, pos) {
   const lines = text.split('\n');
-  const line = Math.min(pos.line ?? 0, lines.length - 1);
+  const line = Math.max(0, Math.min(pos?.line ?? 0, lines.length - 1));
   let off = 0;
   for (let i = 0; i < line; i++) off += lines[i].length + 1;
-  off += Math.min(pos.character ?? 0, lines[line].length);
-  return off;
+  const character = Math.max(
+    0,
+    Math.min(pos?.character ?? 0, lines[line]?.length ?? 0)
+  );
+  return off + character;
 }
 
 function offsetToPos(text, offset) {
@@ -145,13 +148,20 @@ class LspServerCore {
   }
 
   async 'textDocument/didOpen'(params) {
-    const td = params?.textDocument;
-    if (!td?.uri || typeof td.text !== 'string') return;
+    const { textDocument } = params ?? {};
+    if (!textDocument?.uri || typeof textDocument.text !== 'string') {
+      log('didOpen: invalid params', params);
+      return;
+    }
+
     await this.#bootVfs();
-    const path = this.#uriToPath(td.uri);
-    this.#openFiles.set(td.uri, { text: td.text, version: td.version ?? 1 });
+    const path = this.#uriToPath(textDocument.uri);
+    this.#openFiles.set(textDocument.uri, {
+      text: textDocument.text,
+      version: textDocument.version ?? 1,
+    });
     try {
-      this.#env.createFile(path, td.text);
+      this.#env.createFile(path, textDocument.text);
     } catch {
       this.#env.updateFile(path, td.text);
     }
@@ -159,11 +169,16 @@ class LspServerCore {
   }
 
   async 'textDocument/didChange'(params) {
-    const uri = params?.textDocument?.uri;
-    const text = params?.contentChanges?.[0]?.text ?? params?.text;
+    const { textDocument, contentChanges } = params ?? {};
+    const uri = textDocument?.uri;
+    // LSPでは通常contentChangesが使われる
+    const text = contentChanges?.[0]?.text;
+
     if (!uri || typeof text !== 'string') {
+      log('didChange: invalid params', params);
       return;
     }
+
     await this.#bootVfs();
     const path = this.#uriToPath(uri);
     this.#openFiles.set(uri, { text });
@@ -175,17 +190,15 @@ class LspServerCore {
   }
 
   async 'textDocument/completion'(params) {
-    const uri = params?.textDocument?.uri;
-    if (!uri) {
+    const { textDocument, position } = params ?? {};
+    const uri = textDocument?.uri;
+    if (!uri || !position) {
       return { isIncomplete: false, items: [] };
     }
     await this.#bootVfs();
     const path = this.#uriToPath(uri);
     const doc = this.#openFiles.get(uri);
-    const offset = posToOffset(
-      doc?.text ?? '',
-      params?.position ?? { line: 0, character: 0 }
-    );
+    const offset = posToOffset(doc?.text ?? '', position);
     try {
       const completions = this.#env.languageService.getCompletionsAtPosition(
         path,
@@ -205,11 +218,11 @@ class LspServerCore {
   }
 
   async 'completionItem/resolve'(item) {
-    const data = item?.data;
-    if (!data) {
+    if (!item?.data) {
       return item;
     }
     await this.#bootVfs();
+    const { data } = item;
     const d = this.#env.languageService.getCompletionEntryDetails(
       data.path,
       data.offset,
@@ -226,8 +239,9 @@ class LspServerCore {
   }
 
   async 'textDocument/diagnostics'(params) {
-    const uri = params?.textDocument?.uri;
+    const uri = params?.textDocument?.uri; // LSP 3.17
     if (!uri) {
+      // 古いクライアントは textDocument/didChange の後に要求してくることがある
       return [];
     }
     await this.#bootVfs();
@@ -318,7 +332,11 @@ class LSPWorker {
         _send({ jsonrpc: '2.0', id, result });
       }
     } catch (e) {
-      const err = { code: -32000, message: e?.message ?? String(e) };
+      const err = {
+        code: -32000,
+        message: e?.message ?? String(e),
+        data: { stack: e?.stack }, // デバッグ用にスタックトレースを追加
+      };
       if (id !== undefined) {
         _send({ jsonrpc: '2.0', id, error: err });
       }
@@ -327,4 +345,3 @@ class LSPWorker {
 }
 
 new LSPWorker();
-

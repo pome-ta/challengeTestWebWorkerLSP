@@ -70,7 +70,7 @@ export class WorkerTransport {
   }
 }
 
-export async function createWorkerTransport(workerUrl, debug = false) {
+export function createWorkerTransport(workerUrl, debug = false) {
   const worker = new Worker(workerUrl, { type: 'module' });
   return new WorkerTransport(worker, debug);
 }

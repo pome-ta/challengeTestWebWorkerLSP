@@ -17,68 +17,87 @@ class WorkerClientImpl {
     this.#debug = !!debug;
     this.#messageHandler = this.#onMessage.bind(this);
     this.#transport.subscribe(this.#messageHandler);
-    if (this.#debug) console.debug('[WorkerClient] attached to transport', this.#transport);
+    if (this.#debug)
+      console.debug('[WorkerClient] attached to transport', this.#transport);
   }
 
   #onMessage(raw) {
     if (this.#debug) console.debug('[WorkerClient] onmessage raw:', raw);
-  
     let msg;
     try {
       msg = typeof raw === 'string' ? JSON.parse(raw) : raw;
     } catch (e) {
-      if (this.#debug) console.warn('[WorkerClient] failed to parse worker message:', raw);
+      if (this.#debug)
+        console.warn('[WorkerClient] failed to parse worker message:', raw);
       return;
     }
-  
-    if (msg && ('id' in msg)) {
-      const id = msg.id;
-      if (typeof id === 'string' && id.startsWith(CLIENT_ID_PREFIX)) {
-        const pend = this.#pending.get(id);
-        if (!pend) {
-          if (this.#debug) console.warn('[WorkerClient] response for unknown own id:', id, msg);
-          return;
-        }
-        if (pend.timeoutId) clearTimeout(pend.timeoutId);
-        this.#pending.delete(id);
-        if ('error' in msg && msg.error) pend.reject(msg.error);
-        else pend.resolve(msg.result);
+    if (!msg) {
+      if (this.#debug) console.debug('[WorkerClient] received empty message');
+      return;
+    }
+
+    // Handle responses
+    if ('id' in msg) {
+      const { id } = msg;
+      if (typeof id !== 'string' || !id.startsWith(CLIENT_ID_PREFIX)) {
+        if (this.#debug)
+          console.debug(
+            '[WorkerClient] ignoring response for external id:',
+            id
+          );
         return;
       }
-      if (this.#debug) {
-        console.debug('[WorkerClient] ignoring response for external id:', msg.id);
+      const pend = this.#pending.get(id);
+      if (!pend) {
+        if (this.#debug)
+          console.warn('[WorkerClient] response for unknown own id:', id, msg);
+        return;
       }
-      return;
-    }
-  
-    if (msg && msg.method) {
-      if (this.#debug) {
-        console.debug('[WorkerClient] notification received (ignored):', msg.method, msg.params ?? null);
+      if (pend.timeoutId) clearTimeout(pend.timeoutId);
+      this.#pending.delete(id);
+      if ('error' in msg && msg.error) {
+        pend.reject(msg.error);
+      } else {
+        pend.resolve(msg.result);
       }
+      // Handle notifications from worker (currently ignored)
+    } else if (msg.method) {
+      if (this.#debug)
+        console.debug(
+          '[WorkerClient] notification received (ignored):',
+          msg.method,
+          msg.params ?? null
+        );
     } else {
-      if (this.#debug) console.debug('[WorkerClient] received unknown message shape:', msg);
+      if (this.#debug)
+        console.debug('[WorkerClient] received unknown message shape:', msg);
     }
   }
 
   send(method, params = {}, opts = {}) {
-    const timeoutMs = typeof opts.timeoutMs === 'number' ? opts.timeoutMs : 10000;
+    const timeoutMs =
+      typeof opts.timeoutMs === 'number' ? opts.timeoutMs : 10000;
     const id = `${CLIENT_ID_PREFIX}${this.#seq++}`;
     const msg = { jsonrpc: '2.0', id, method, params };
     const raw = JSON.stringify(msg);
-  
+
     return new Promise((resolve, reject) => {
-      const timeoutId = timeoutMs > 0 ? setTimeout(() => {
-        if (this.#pending.has(id)) {
-          this.#pending.delete(id);
-          reject({ code: -32000, message: `timeout (${timeoutMs}ms)` });
-        }
-      }, timeoutMs) : null;
-  
+      const timeoutId =
+        timeoutMs > 0
+          ? setTimeout(() => {
+              if (this.#pending.has(id)) {
+                this.#pending.delete(id);
+                reject({ code: -32000, message: `timeout (${timeoutMs}ms)` });
+              }
+            }, timeoutMs)
+          : null;
+
       this.#pending.set(id, { resolve, reject, timeoutId });
-  
+
       try {
         this.#transport.send(raw);
-        if (this.#debug) console.debug('[WorkerClient] sent', { id, method, params });
+        if (this.#debug)
+          console.debug('[WorkerClient] sent', { id, method, params });
       } catch (e) {
         if (timeoutId) clearTimeout(timeoutId);
         this.#pending.delete(id);
@@ -118,6 +137,13 @@ class WorkerClientImpl {
 
   close() {
     try {
+      // Reject all pending promises
+      for (const [id, pend] of this.#pending.entries()) {
+        if (pend.timeoutId) clearTimeout(pend.timeoutId);
+        pend.reject({ code: -32001, message: 'WorkerClient closed' });
+      }
+      this.#pending.clear();
+
       this.#transport.unsubscribe(this.#messageHandler);
       this.#transport.close?.();
     } catch (e) {
@@ -130,9 +156,9 @@ class WorkerClientImpl {
   }
 }
 
-export async function createWorkerClient(workerUrl, options = {}) {
+export function createWorkerClient(workerUrl, options = {}) {
   const { debug = false } = options;
-  const transport = await createWorkerTransport(workerUrl, debug);
+  const transport = createWorkerTransport(workerUrl, debug);
   const client = new WorkerClientImpl({ transport, debug });
 
   if (debug) console.debug('[createWorkerClient] initialized');
