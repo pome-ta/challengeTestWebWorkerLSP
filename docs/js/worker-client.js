@@ -3,6 +3,8 @@
 
 import { createWorkerTransport } from './worker-transport.js';
 
+const CLIENT_ID_PREFIX = 'wc:';
+
 class WorkerClientImpl {
   #transport;
   #seq = 1;
@@ -31,7 +33,7 @@ class WorkerClientImpl {
   
     if (msg && ('id' in msg)) {
       const id = msg.id;
-      if (typeof id === 'string' && id.startsWith('wc:')) {
+      if (typeof id === 'string' && id.startsWith(CLIENT_ID_PREFIX)) {
         const pend = this.#pending.get(id);
         if (!pend) {
           if (this.#debug) console.warn('[WorkerClient] response for unknown own id:', id, msg);
@@ -60,7 +62,7 @@ class WorkerClientImpl {
 
   send(method, params = {}, opts = {}) {
     const timeoutMs = typeof opts.timeoutMs === 'number' ? opts.timeoutMs : 10000;
-    const id = `wc:${this.#seq++}`;
+    const id = `${CLIENT_ID_PREFIX}${this.#seq++}`;
     const msg = { jsonrpc: '2.0', id, method, params };
     const raw = JSON.stringify(msg);
   
