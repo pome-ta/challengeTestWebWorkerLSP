@@ -2,7 +2,8 @@
 // - LSP Client と Web Worker の間を仲介する Transport クラス
 // - createWorkerTransport(workerUrl) -> Promise<WorkerTransport>
 
-export class WorkerTransport {
+// このクラスはモジュール内部でのみ使用し、直接エクスポートしない
+class WorkerTransport {
   #worker;
   #handlers = new Set();
   #debug;
@@ -13,11 +14,14 @@ export class WorkerTransport {
 
     this.#worker.onmessage = (event) => {
       const data = event.data;
-      const json = typeof data === 'string' ? data : JSON.stringify(data);
 
-      this.#handlers.forEach((handler) => {
+      this.#handlers.forEach(({ handler, format }) => {
         try {
-          handler(json);
+          // format に応じてメッセージを変換し、ハンドラを呼び出す
+          const message = format === 'json'
+            ? (typeof data === 'string' ? data : JSON.stringify(data))
+            : data;
+          handler(message);
         } catch (err) {
           console.error('[worker-transport] handler error:', err);
         }
@@ -34,23 +38,29 @@ export class WorkerTransport {
   }
 
   send(message) {
-    this.#worker.postMessage(message);
-
-    if (this.#debug) {
-      console.debug('[worker-transport] sent:', message);
+    try {
+      this.#worker.postMessage(message);
+      if (this.#debug) {
+        console.debug('[worker-transport] sent:', message);
+      }
+    } catch (e) {
+      console.error('[worker-transport] send failed:', e, message);
     }
   }
 
-  subscribe(handler) {
-    this.#handlers.add(handler);
+  subscribe(handler, options = {}) {
+    const { format = 'json' } = options; // デフォルトは 'json'
+    const entry = { handler, format };
+    this.#handlers.add(entry);
 
     if (this.#debug) {
-      console.debug('[worker-transport] handler subscribed:', handler);
+      console.debug('[worker-transport] handler subscribed:', { handler, format });
     }
   }
 
   unsubscribe(handler) {
-    this.#handlers.delete(handler);
+    const entry = Array.from(this.#handlers).find(e => e.handler === handler);
+    if (entry) this.#handlers.delete(entry);
 
     if (this.#debug) {
       console.debug('[worker-transport] handler unsubscribed:', handler);
@@ -70,7 +80,22 @@ export class WorkerTransport {
   }
 }
 
-export function createWorkerTransport(workerUrl, debug = false) {
+// LSPClient (@codemirror/lsp-client) 用のラッパー
+// subscribe のデフォルトを 'json' 形式にする
+export class LSPTransportAdapter {
+  #transport;
+  constructor(transport) {
+    this.#transport = transport;
+  }
+  send = (message) => this.#transport.send(message);
+  subscribe = (handler) => this.#transport.subscribe(handler, { format: 'json' });
+  unsubscribe = (handler) => this.#transport.unsubscribe(handler);
+  close = () => this.#transport.close();
+  get worker() { return this.#transport.worker; }
+}
+
+
+export async function createWorkerTransport(workerUrl, debug = false) {
   const worker = new Worker(workerUrl, { type: 'module' });
   return new WorkerTransport(worker, debug);
 }

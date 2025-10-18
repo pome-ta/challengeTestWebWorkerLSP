@@ -54,41 +54,48 @@ function displayPartsToString(parts) {
 }
 
 function mapTsKindToLsp(tsKind) {
-  const map = {
-    method: 2,
-    function: 3,
-    constructor: 4,
-    field: 5,
-    variable: 6,
-    class: 7,
-    interface: 8,
-    module: 9,
-    property: 10,
-    unit: 11,
-    value: 12,
-    enum: 13,
-    keyword: 14,
-    snippet: 15,
-    text: 1,
-  };
-  return map[tsKind?.toLowerCase?.()] ?? 6;
+  // より宣言的で読みやすい switch 文を使用
+  switch (tsKind) {
+    case 'method': return 2;
+    case 'function': return 3;
+    case 'constructor': return 4;
+    case 'field': return 5;
+    case 'variable': return 6;
+    case 'class': return 7;
+    case 'interface': return 8;
+    case 'module': return 9;
+    case 'property': return 10;
+    case 'unit': return 11;
+    case 'value': return 12;
+    case 'enum': return 13;
+    case 'keyword': return 14;
+    case 'snippet': return 15;
+    case 'text': return 1;
+    default: return 6; // Default to Variable
+  }
 }
 
 /* ---  LspServerCore --- */
 class LspServerCore {
+  static serverCapabilities = {
+    textDocumentSync: 1, // Full sync
+    completionProvider: {
+      resolveProvider: true, // `completionItem/resolve` をサポート
+    },
+    hoverProvider: true, // `textDocument/hover` をサポート
+  };
+
   #defaultMap;
   #system;
   #env;
-  #bootPromise;
+  // VFSの初期化を遅延させるためのPromise
+  #bootPromise = null;
   #openFiles = new Map();
 
   async initialize() {
     await this.#bootVfs();
     return {
-      capabilities: {
-        textDocumentSync: 1,
-        completionProvider: { resolveProvider: true },
-      },
+      capabilities: LspServerCore.serverCapabilities,
       serverInfo: { name: 'ts-vfs-worker', version: ts.version ?? 'unknown' },
     };
   }
@@ -117,13 +124,10 @@ class LspServerCore {
   }
 
   async #bootVfs() {
-    if (this.#env) {
-      return;
-    }
-    if (this.#bootPromise) {
-      return this.#bootPromise;
-    }
-    this.#bootPromise = (async () => {
+    // Lazy initialization パターン
+    if (this.#bootPromise) return this.#bootPromise;
+
+    return this.#bootPromise = (async () => {
       const defaultMap = await vfs.createDefaultMapFromCDN(
         { target: ts.ScriptTarget.ES2020 },
         ts.version,
@@ -140,11 +144,6 @@ class LspServerCore {
       log('vfs booted (ts:', ts.version, ')');
       return env;
     })();
-    try {
-      return await this.#bootPromise;
-    } finally {
-      this.#bootPromise = null;
-    }
   }
 
   async 'textDocument/didOpen'(params) {
@@ -160,12 +159,14 @@ class LspServerCore {
       text: textDocument.text,
       version: textDocument.version ?? 1,
     });
-    try {
+
+    // ファイルが存在すれば更新、なければ作成
+    if (this.#system.fileExists(path)) {
+      this.#env.updateFile(path, textDocument.text);
+    } else {
       this.#env.createFile(path, textDocument.text);
-    } catch {
-      this.#env.updateFile(path, td.text);
     }
-    log('didOpen', td.uri);
+    log('didOpen', textDocument.uri);
   }
 
   async 'textDocument/didChange'(params) {
@@ -182,9 +183,11 @@ class LspServerCore {
     await this.#bootVfs();
     const path = this.#uriToPath(uri);
     this.#openFiles.set(uri, { text });
-    try {
+
+    // ファイルが存在すれば更新、なければ作成
+    if (this.#system.fileExists(path)) {
       this.#env.updateFile(path, text);
-    } catch {
+    } else {
       this.#env.createFile(path, text);
     }
   }
@@ -254,15 +257,12 @@ class LspServerCore {
     return all.map((d) => {
       const r1 = offsetToPos(content, d.start ?? 0);
       const r2 = offsetToPos(content, (d.start ?? 0) + (d.length ?? 0));
-      const msg =
-        typeof d.messageText === 'string'
-          ? d.messageText
-          : JSON.stringify(d.messageText);
+      // ネストされたDiagnosticMessageChainにも対応
+      const msg = ts.flattenDiagnosticMessageText(d.messageText, '\n');
       return {
         range: { start: r1, end: r2 },
         message: msg,
-        severity:
-          d.category === ts.DiagnosticCategory.Error ? 'error' : 'warning',
+        severity: d.category === ts.DiagnosticCategory.Error ? 1 : 2, // 1: Error, 2: Warning
         code: d.code,
       };
     });
@@ -296,47 +296,62 @@ class LSPWorker {
   }
 
   async #onMessage(event) {
+    const rawData = event.data;
     let msg;
+
+    // 1. パース処理: 不正なJSONはここで弾く
     try {
       msg =
-        typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-    } catch {
-      return _send({
+        typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+    } catch (e) {
+      // JSONとしてパースできない -> Parse Error (-32700)
+      _send({
         jsonrpc: '2.0',
+        id: null,
         error: { code: -32700, message: 'Parse error' },
       });
-    }
-
-    const { id, method, params } = msg;
-    if (!method) {
       return;
     }
 
+    const { id, method, params } = msg ?? {};
+
+    // 2. リクエスト検証: methodプロパティの存在と型をチェック
+    if (typeof method !== 'string') {
+      // 有効なリクエストではない -> Invalid Request (-32600)
+      if (id !== undefined) {
+        _send({
+          jsonrpc: '2.0',
+          id,
+          error: { code: -32600, message: 'Invalid Request: "method" is missing or not a string.' },
+        });
+      }
+      return;
+    }
+
+    // 3. ハンドラの検索と実行
     const handler = this.#handlers[method];
     if (!handler) {
+      // メソッドが見つからない -> Method Not Found (-32601)
       if (id !== undefined) {
         _send({
           jsonrpc: '2.0',
           id,
           error: { code: -32601, message: `Method not found: ${method}` },
         });
-      } else {
-        log('unknown notify', method);
       }
       return;
     }
 
+    // 4. ハンドラ実行と結果の返却
     try {
       const result = await handler(params);
+      // idがあればリクエスト、なければ通知(notification)
       if (id !== undefined) {
         _send({ jsonrpc: '2.0', id, result });
       }
     } catch (e) {
-      const err = {
-        code: -32000,
-        message: e?.message ?? String(e),
-        data: { stack: e?.stack }, // デバッグ用にスタックトレースを追加
-      };
+      // サーバー内部のエラー -> Server Error (-32000 ~ -32099)
+      const err = { code: -32000, message: e?.message ?? String(e), data: { stack: e?.stack } };
       if (id !== undefined) {
         _send({ jsonrpc: '2.0', id, error: err });
       }

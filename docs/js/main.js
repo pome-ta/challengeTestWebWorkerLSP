@@ -51,9 +51,9 @@ const view = new EditorView({
   // "wheel" イベントリスナーを passive として登録するように CodeMirror に指示し、
   // パフォーマンスに関するコンソールの警告を抑制します。
   // see: https://github.com/codemirror/view/blob/main/src/editorview.ts#L135
-  dispatch: (tr, view) => {
-    view.update([tr]);
-  },
+  // dispatch: (tr, view) => {
+  //   view.update([tr]);
+  // },
 });
 
 // cleanup on unload
