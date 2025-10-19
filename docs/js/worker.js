@@ -1,13 +1,19 @@
-// worker.js v0.3
-// Minimal LSP Worker (TypeScript + @typescript/vfs)
-// ESM module
-// 現段階では console 転送を main に送らない(パフォーマンス優先)
+// worker.js v0.4
+/**
+ * @file Web Worker上で動作するLSPサーバーの実装。
+ * TypeScriptの仮想ファイルシステム(@typescript/vfs)を利用して、
+ * メインスレッドから受け取ったコードに対して型チェックや補完機能を提供する。
+ */
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
 
 const DEBUG_MODE = true; // true にすると verbose log 出力
 
+/**
+ * デバッグモードが有効な場合のみコンソールにログを出力する。
+ * @param {...any} args - コンソールに出力する引数。
+ */
 function log(...args) {
   if (DEBUG_MODE) {
     console.log('[worker]', ...args);
@@ -17,25 +23,32 @@ function log(...args) {
 /* --- util --- */
 
 /**
- * _send(obj)
- * - main 側が文字列を期待するケースがあるため Transport 側で調整する。
- * - Worker 側はオブジェクト(構造化クローン)で送ることに統一する(高速で安全)。
+ * メインスレッドにメッセージを送信する。
+ * Worker側は常にオブジェクトを送信し、メインスレッド側(Transport)で必要に応じて文字列化する。
+ * オブジェクトを直接送信することで、高速で安全な構造化クローンを利用できる。
+ * @param {object} obj - メインスレッドに送信するオブジェクト。
  */
 function _send(obj) {
   try {
-    // オブジェクトをそのまま postMessage する(structured clone)
     self.postMessage(obj);
   } catch (e) {
-    // stringify fallback はやめる:受け側で対応する方が安全(双方向の一貫性を保つため)
     console.error('[worker] _send failed to postMessage', e, obj);
   }
 }
 
+/**
+ * テキストとLSPのPositionオブジェクト({line, character})から、
+ * テキストの先頭からのオフセット（文字数）を計算する。
+ * @param {string} text - 全体のテキスト。
+ * @param {{line: number, character: number}} pos - LSPのPositionオブジェクト。
+ * @returns {number} 計算されたオフセット。
+ */
 function posToOffset(text, pos) {
   const lines = text.split('\n');
   const line = Math.max(0, Math.min(pos?.line ?? 0, lines.length - 1));
-  let off = 0;
-  for (let i = 0; i < line; i++) off += lines[i].length + 1;
+  const off = lines
+    .slice(0, line)
+    .reduce((acc, currentLine) => acc + currentLine.length + 1, 0);
   const character = Math.max(
     0,
     Math.min(pos?.character ?? 0, lines[line]?.length ?? 0)
@@ -43,55 +56,111 @@ function posToOffset(text, pos) {
   return off + character;
 }
 
+/**
+ * テキストとオフセットから、LSPのPositionオブジェクト({line, character})を計算する。
+ * @param {string} text - 全体のテキスト。
+ * @param {number} offset - テキストの先頭からのオフセット。
+ * @returns {{line: number, character: number}} 計算されたPositionオブジェクト。
+ */
 function offsetToPos(text, offset) {
+  // 不正なオフセット値を安全な範囲に丸める
   const safe = Math.max(0, Math.min(offset, text.length));
   const lines = text.slice(0, safe).split('\n');
   return { line: lines.length - 1, character: lines[lines.length - 1].length };
 }
 
+/**
+ * TypeScriptのDisplayParts配列を単一の文字列に変換する。
+ * @param {ts.SymbolDisplayPart[]} parts - TypeScriptのDisplayParts。
+ * @returns {string} 結合された文字列。
+ */
 function displayPartsToString(parts) {
   return parts?.map((p) => p.text).join('') ?? '';
 }
 
+// --- LSPとTypeScriptの型マッピング ---
+
+/**
+ * @see https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#completionItemKind
+ */
+const CompletionItemKind = {
+  Text: 1,
+  Method: 2,
+  Function: 3,
+  Constructor: 4,
+  Field: 5,
+  Variable: 6,
+  Class: 7,
+  Interface: 8,
+  Module: 9,
+  Property: 10,
+  Unit: 11,
+  Value: 12,
+  Enum: 13,
+  Keyword: 14,
+  Snippet: 15,
+  // ... 他にも多くの種類があります
+};
+
+/** TypeScriptの`ScriptElementKind`からLSPの`CompletionItemKind`への変換マップ */
+const TS_KIND_TO_LSP_KIND_MAP = {
+  method: CompletionItemKind.Method,
+  function: CompletionItemKind.Function,
+  constructor: CompletionItemKind.Constructor,
+  field: CompletionItemKind.Field,
+  variable: CompletionItemKind.Variable,
+  class: CompletionItemKind.Class,
+  interface: CompletionItemKind.Interface,
+  module: CompletionItemKind.Module,
+  property: CompletionItemKind.Property,
+  unit: CompletionItemKind.Unit,
+  value: CompletionItemKind.Value,
+  enum: CompletionItemKind.Enum,
+  keyword: CompletionItemKind.Keyword,
+  snippet: CompletionItemKind.Snippet,
+  text: CompletionItemKind.Text,
+};
+
+/**
+ * TypeScriptの`ScriptElementKind`文字列をLSPの`CompletionItemKind`数値に変換する。
+ * @param {string} tsKind - TypeScriptのkind文字列。
+ * @returns {number} LSPのCompletionItemKind。
+ */
 function mapTsKindToLsp(tsKind) {
-  // より宣言的で読みやすい switch 文を使用
-  switch (tsKind) {
-    case 'method': return 2;
-    case 'function': return 3;
-    case 'constructor': return 4;
-    case 'field': return 5;
-    case 'variable': return 6;
-    case 'class': return 7;
-    case 'interface': return 8;
-    case 'module': return 9;
-    case 'property': return 10;
-    case 'unit': return 11;
-    case 'value': return 12;
-    case 'enum': return 13;
-    case 'keyword': return 14;
-    case 'snippet': return 15;
-    case 'text': return 1;
-    default: return 6; // Default to Variable
-  }
+  return TS_KIND_TO_LSP_KIND_MAP[tsKind] ?? CompletionItemKind.Variable;
 }
 
 /* ---  LspServerCore --- */
+/**
+ * LSPの各機能（ドキュメント同期、補完、ホバーなど）のコアロジックを実装するクラス。
+ * @class LspServerCore
+ */
 class LspServerCore {
+  /** サーバーが提供する機能の定義 */
   static serverCapabilities = {
-    textDocumentSync: 1, // Full sync
+    textDocumentSync: 1, // 1: Full. ドキュメントの同期は常に全内容を送信する。
     completionProvider: {
       resolveProvider: true, // `completionItem/resolve` をサポート
     },
     hoverProvider: true, // `textDocument/hover` をサポート
   };
 
+  /** @type {Map<string, string> | null} - TypeScriptのVFS用のデフォルトファイルマップ */
   #defaultMap;
+  /** @type {ts.System | null} - TypeScriptのVFSのシステムオブジェクト */
   #system;
+  /** @type {vfs.VirtualTypeScriptEnvironment | null} - TypeScriptの仮想環境 */
   #env;
-  // VFSの初期化を遅延させるためのPromise
+  /** @type {Promise<vfs.VirtualTypeScriptEnvironment> | null} - VFSの初期化処理を管理するPromise（遅延初期化用） */
   #bootPromise = null;
+  /** @type {Map<string, {text: string, version?: number}>} - 開かれているファイルのURIと内容を保持するマップ */
   #openFiles = new Map();
 
+  /**
+   * `initialize`リクエストのハンドラ。
+   * VFSを起動し、サーバーの機能と情報をクライアントに返す。
+   * @returns {Promise<object>} LSPのInitializeResult。
+   */
   async initialize() {
     await this.#bootVfs();
     return {
@@ -100,34 +169,59 @@ class LspServerCore {
     };
   }
 
+  /**
+   * `initialized`通知のハンドラ。クライアントの初期化完了を受け取る。
+   */
   async initialized() {
     log('initialized');
   }
 
+  /**
+   * クライアントとの疎通確認用のカスタムメソッド。
+   * @param {object} params - パラメータ。
+   * @returns {Promise<{echoed: string}>}
+   */
   async ping(params) {
     return { echoed: params?.msg ?? '(no message)' };
   }
 
+  /**
+   * `shutdown`リクエストのハンドラ。
+   * リソースを解放し、シャットダウン処理を行う。
+   * @returns {Promise<{success: boolean}>}
+   */
   async shutdown() {
     try {
+      // リソース解放処理
       this.#defaultMap?.clear?.();
-    } catch {}
-    this.#system = this.#env = this.#defaultMap = null;
-    this.#openFiles.clear();
-    log('shutdown completed');
+      this.#system = this.#env = this.#defaultMap = null;
+      this.#openFiles.clear();
+    } finally {
+      // 成功・失敗にかかわらず実行
+      log('shutdown completed');
+    }
     return { success: true };
   }
 
+  /**
+   * `exit`通知のハンドラ。
+   * Workerを終了させる。
+   */
   async exit() {
     log('exit received');
     self.close();
   }
 
+  /**
+   * TypeScriptの仮想ファイルシステム(VFS)を遅延初期化する。
+   * @returns {Promise<vfs.VirtualTypeScriptEnvironment>} 初期化された仮想環境。
+   */
   async #bootVfs() {
     // Lazy initialization パターン
-    if (this.#bootPromise) return this.#bootPromise;
-
-    return this.#bootPromise = (async () => {
+    // this.#bootPromise が nullish (null or undefined) の場合のみ、
+    // 右辺の即時実行非同期関数を評価・代入する
+    this.#bootPromise ??= (async () => {
+      // CDNからTypeScriptの型定義ファイル(.d.ts)をダウンロードしてVFSを初期化
       const defaultMap = await vfs.createDefaultMapFromCDN(
         { target: ts.ScriptTarget.ES2020 },
         ts.version,
@@ -135,6 +229,7 @@ class LspServerCore {
         ts
       );
       const system = vfs.createSystem(defaultMap);
+      // 仮想環境を作成
       const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, {
         allowJs: true,
       });
@@ -144,8 +239,13 @@ class LspServerCore {
       log('vfs booted (ts:', ts.version, ')');
       return env;
     })();
+    return this.#bootPromise;
   }
 
+  /**
+   * `textDocument/didOpen`通知のハンドラ。
+   * @param {object} params - LSPのdidOpenパラメータ。
+   */
   async 'textDocument/didOpen'(params) {
     const { textDocument } = params ?? {};
     if (!textDocument?.uri || typeof textDocument.text !== 'string') {
@@ -160,38 +260,41 @@ class LspServerCore {
       version: textDocument.version ?? 1,
     });
 
-    // ファイルが存在すれば更新、なければ作成
-    if (this.#system.fileExists(path)) {
-      this.#env.updateFile(path, textDocument.text);
-    } else {
-      this.#env.createFile(path, textDocument.text);
-    }
+    this.#updateFile(path, textDocument.text);
     log('didOpen', textDocument.uri);
   }
 
+  /**
+   * `textDocument/didChange`通知のハンドラ。
+   * @param {object} params - LSPのdidChangeパラメータ。
+   */
   async 'textDocument/didChange'(params) {
     const { textDocument, contentChanges } = params ?? {};
     const uri = textDocument?.uri;
-    // LSPでは通常contentChangesが使われる
-    const text = contentChanges?.[0]?.text;
-
-    if (!uri || typeof text !== 'string') {
+    // TextDocumentSyncKind.Full を想定し、最初の変更に完全なテキストが含まれていることを期待
+    if (
+      !uri ||
+      !Array.isArray(contentChanges) ||
+      contentChanges.length === 0 ||
+      typeof contentChanges[0].text !== 'string'
+    ) {
       log('didChange: invalid params', params);
       return;
     }
 
+    const text = contentChanges[0].text;
     await this.#bootVfs();
     const path = this.#uriToPath(uri);
     this.#openFiles.set(uri, { text });
 
-    // ファイルが存在すれば更新、なければ作成
-    if (this.#system.fileExists(path)) {
-      this.#env.updateFile(path, text);
-    } else {
-      this.#env.createFile(path, text);
-    }
+    this.#updateFile(path, text);
   }
 
+  /**
+   * `textDocument/completion`リクエストのハンドラ。
+   * @param {object} params - LSPのcompletionパラメータ。
+   * @returns {Promise<object>} LSPのCompletionList。
+   */
   async 'textDocument/completion'(params) {
     const { textDocument, position } = params ?? {};
     const uri = textDocument?.uri;
@@ -202,6 +305,7 @@ class LspServerCore {
     const path = this.#uriToPath(uri);
     const doc = this.#openFiles.get(uri);
     const offset = posToOffset(doc?.text ?? '', position);
+
     try {
       const completions = this.#env.languageService.getCompletionsAtPosition(
         path,
@@ -211,6 +315,7 @@ class LspServerCore {
       const items = (completions?.entries ?? []).map((e) => ({
         label: e.name,
         kind: mapTsKindToLsp(e.kind),
+        // `completionItem/resolve`で詳細を取得するために必要な情報をdataに詰める
         data: { path, offset, name: e.name },
       }));
       return { isIncomplete: !!completions?.isIncomplete, items };
@@ -220,6 +325,11 @@ class LspServerCore {
     }
   }
 
+  /**
+   * `completionItem/resolve`リクエストのハンドラ。補完アイテムの詳細を提供する。
+   * @param {object} item - 解決対象のCompletionItem。
+   * @returns {Promise<object>} 詳細情報が追加されたCompletionItem。
+   */
   async 'completionItem/resolve'(item) {
     if (!item?.data) {
       return item;
@@ -227,6 +337,7 @@ class LspServerCore {
     await this.#bootVfs();
     const { data } = item;
     const d = this.#env.languageService.getCompletionEntryDetails(
+      // `textDocument/completion`で詰めた情報を使って詳細を取得
       data.path,
       data.offset,
       data.name,
@@ -241,122 +352,226 @@ class LspServerCore {
     });
   }
 
+  /**
+   * @see https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#diagnostic
+   */
+  static DiagnosticSeverity = {
+    Error: 1,
+    Warning: 2,
+    Information: 3,
+    Hint: 4,
+  };
+
+  /**
+   * `textDocument/diagnostics`リクエストのハンドラ。コードの診断情報（エラーや警告）を提供する。
+   * @param {object} params - LSPのdiagnosticsパラメータ。
+   * @returns {Promise<object>} LSPのFullDocumentDiagnosticReport。
+   */
   async 'textDocument/diagnostics'(params) {
     const uri = params?.textDocument?.uri; // LSP 3.17
     if (!uri) {
-      // 古いクライアントは textDocument/didChange の後に要求してくることがある
-      return [];
+      return { kind: 'full', items: [] }; // LSP 3.17
     }
     await this.#bootVfs();
+
+    const doc = this.#openFiles.get(uri);
+    if (!doc) {
+      // ファイルが開かれていない場合は診断情報なし
+      return { kind: 'full', items: [] };
+    }
+
     const path = this.#uriToPath(uri);
-    const content = this.#openFiles.get(uri)?.text ?? '';
+    // 構文エラーと意味論エラーの両方を取得
     const all = [
       ...this.#env.languageService.getSyntacticDiagnostics(path),
       ...this.#env.languageService.getSemanticDiagnostics(path),
     ];
-    return all.map((d) => {
-      const r1 = offsetToPos(content, d.start ?? 0);
-      const r2 = offsetToPos(content, (d.start ?? 0) + (d.length ?? 0));
-      // ネストされたDiagnosticMessageChainにも対応
-      const msg = ts.flattenDiagnosticMessageText(d.messageText, '\n');
-      return {
-        range: { start: r1, end: r2 },
-        message: msg,
-        severity: d.category === ts.DiagnosticCategory.Error ? 1 : 2, // 1: Error, 2: Warning
-        code: d.code,
-      };
-    });
+
+    const items = all.map((d) =>
+      this.#tsDiagnosticToLspDiagnostic(d, doc.text)
+    );
+    // LSP 3.17仕様に準拠した形式で返す
+    return { kind: 'full', items };
   }
 
+  /**
+   * TypeScriptのDiagnosticオブジェクトをLSPのDiagnosticオブジェクトに変換する。
+   * @param {ts.Diagnostic} tsDiag - TypeScriptのDiagnosticオブジェクト。
+   * @param {string} fileContent - 診断対象のファイルの内容。
+   * @returns {object} LSPのDiagnosticオブジェクト。
+   */
+  #tsDiagnosticToLspDiagnostic(tsDiag, fileContent) {
+    const start = tsDiag.start ?? 0;
+    const end = start + (tsDiag.length ?? 0);
+    const range = {
+      start: offsetToPos(fileContent, start),
+      end: offsetToPos(fileContent, end),
+    };
+
+    return {
+      range,
+      message: ts.flattenDiagnosticMessageText(tsDiag.messageText, '\n'),
+      severity: this.#tsCategoryToLspSeverity(tsDiag.category),
+      code: tsDiag.code,
+      source: 'typescript',
+    };
+  }
+
+  /**
+   * ファイルURIからVFSで使うパスに変換する。
+   * @param {string} uri - ファイルURI。
+   * @returns {string} VFS用のパス。
+   */
   #uriToPath(uri) {
     return uri.replace(/^file:\/\/\/?/, '');
   }
+
+  /** VFSにファイルを作成または更新する */
+  #updateFile(path, text) {
+    if (this.#system.fileExists(path)) {
+      this.#env.updateFile(path, text);
+    } else {
+      this.#env.createFile(path, text);
+    }
+  }
+
+  /** TypeScriptのDiagnosticCategoryをLSPのDiagnosticSeverityに変換する */
+  #tsCategoryToLspSeverity(category) {
+    switch (category) {
+      case ts.DiagnosticCategory.Error:
+        return LspServerCore.DiagnosticSeverity.Error;
+      case ts.DiagnosticCategory.Warning:
+        return LspServerCore.DiagnosticSeverity.Warning;
+      case ts.DiagnosticCategory.Suggestion:
+        return LspServerCore.DiagnosticSeverity.Hint;
+      case ts.DiagnosticCategory.Message:
+        return LspServerCore.DiagnosticSeverity.Information;
+      default:
+        return LspServerCore.DiagnosticSeverity.Information;
+    }
+  }
 }
 
-/* --- JSON-RPC Worker --- */
+/**
+ * JSON-RPCのメッセージを解釈し、適切なLspServerCoreのメソッドにディスパッチするクラス。
+ * Workerのエントリーポイントとして機能する。
+ * @class LSPWorker
+ */
+const RpcErrorCode = {
+  ParseError: -32700,
+  InvalidRequest: -32600,
+  MethodNotFound: -32601,
+  InvalidParams: -32602,
+  InternalError: -32603,
+};
 
 class LSPWorker {
+  /** @type {LspServerCore} - LSPのコアロジックを担うインスタンス */
   #core = new LspServerCore();
+  /** @type {Object<string, Function>} - RPCメソッド名とハンドラ関数のマップ */
   #handlers = {};
 
+  /** LSPWorkerのインスタンスを生成し、ハンドラを登録する。 */
   constructor() {
-    // LspServerCore のメソッドを自動登録(private 除外)
+    // LspServerCore の公開メソッドを動的にハンドラとして登録する
     for (const name of Object.getOwnPropertyNames(
       Object.getPrototypeOf(this.#core)
     )) {
-      if (name.startsWith('#')) {
-        continue;
-      }
       const fn = this.#core[name];
-      if (typeof fn === 'function') {
+      // LSPのRPCメソッド(例: 'textDocument/completion')や、
+      // カスタムメソッド(例: 'initialize')のみをハンドラとして登録する
+      if (
+        typeof fn === 'function' &&
+        !name.startsWith('#') &&
+        name !== 'constructor'
+      ) {
         this.#handlers[name] = fn.bind(this.#core);
       }
     }
+    // Workerのメッセージハンドラを設定
     self.onmessage = (event) => this.#onMessage(event);
   }
 
+  /**
+   * Workerがメッセージを受信したときに呼び出されるメインのハンドラ。
+   * JSON-RPCメッセージを解析し、処理をディスパッチする。
+   * @param {MessageEvent} event - onmessageイベントオブジェクト。
+   */
   async #onMessage(event) {
     const rawData = event.data;
     let msg;
 
-    // 1. パース処理: 不正なJSONはここで弾く
     try {
-      msg =
-        typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+      // メッセージが文字列ならJSONとしてパース、オブジェクトならそのまま使用
+      msg = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
     } catch (e) {
-      // JSONとしてパースできない -> Parse Error (-32700)
-      _send({
-        jsonrpc: '2.0',
-        id: null,
-        error: { code: -32700, message: 'Parse error' },
-      });
+      this.#sendErrorResponse(null, RpcErrorCode.ParseError, 'Parse error');
       return;
     }
 
-    const { id, method, params } = msg ?? {};
+    const { id, method, params, jsonrpc } = msg ?? {};
 
-    // 2. リクエスト検証: methodプロパティの存在と型をチェック
-    if (typeof method !== 'string') {
-      // 有効なリクエストではない -> Invalid Request (-32600)
+    // 2. リクエスト検証: JSON-RPC 2.0仕様に準拠しているか、methodが文字列か
+    if (jsonrpc !== '2.0' || typeof method !== 'string') {
+      // idがあれば、無効なリクエストであることをクライアントに通知
       if (id !== undefined) {
-        _send({
-          jsonrpc: '2.0',
+        this.#sendErrorResponse(
           id,
-          error: { code: -32600, message: 'Invalid Request: "method" is missing or not a string.' },
-        });
+          RpcErrorCode.InvalidRequest,
+          'Invalid Request'
+        );
       }
       return;
     }
 
-    // 3. ハンドラの検索と実行
+    // 3. ハンドラの検索
     const handler = this.#handlers[method];
-    if (!handler) {
-      // メソッドが見つからない -> Method Not Found (-32601)
+    if (typeof handler !== 'function') {
+      // idがあれば、メソッドが見つからないことをクライアントに通知
       if (id !== undefined) {
-        _send({
-          jsonrpc: '2.0',
+        this.#sendErrorResponse(
           id,
-          error: { code: -32601, message: `Method not found: ${method}` },
-        });
+          RpcErrorCode.MethodNotFound,
+          `Method not found: ${method}`
+        );
       }
       return;
     }
 
     // 4. ハンドラ実行と結果の返却
     try {
-      const result = await handler(params);
-      // idがあればリクエスト、なければ通知(notification)
+      const result = await handler(params, msg); // ハンドラを実行
+      // idがあればリクエストなので、結果をレスポンスとして返す
       if (id !== undefined) {
         _send({ jsonrpc: '2.0', id, result });
       }
     } catch (e) {
-      // サーバー内部のエラー -> Server Error (-32000 ~ -32099)
-      const err = { code: -32000, message: e?.message ?? String(e), data: { stack: e?.stack } };
+      // ハンドラ実行中にエラーが発生した場合
+      // サーバー内部のエラー -> Internal Error
       if (id !== undefined) {
-        _send({ jsonrpc: '2.0', id, error: err });
+        this.#sendErrorResponse(
+          id,
+          RpcErrorCode.InternalError,
+          e?.message ?? String(e),
+          { stack: e?.stack }
+        );
       }
     }
   }
+
+  /**
+   * JSON-RPCのエラーレスポンスを送信するヘルパーメソッド。
+   * @param {string | number | null} id - 対応するリクエストのID。
+   * @param {number} code - エラーコード。
+   * @param {string} message - エラーメッセージ。
+   * @param {any} [data] - エラーに関する追加情報。
+   */
+  #sendErrorResponse(id, code, message, data) {
+    const error = { code, message };
+    if (data) error.data = data;
+    _send({ jsonrpc: '2.0', id, error });
+  }
 }
 
+// Workerのインスタンスを作成し、メッセージの待受を開始する
 new LSPWorker();
