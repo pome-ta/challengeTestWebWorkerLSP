@@ -1,4 +1,4 @@
-// --- main.js v0.3
+// --- main.js v0.4
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { autocompletion } from '@codemirror/autocomplete';
