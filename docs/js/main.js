@@ -6,17 +6,33 @@ import { typescriptLanguage } from '@codemirror/lang-javascript';
 import { languageServerExtensions, LSPClient } from '@codemirror/lsp-client';
 import { basicSetup } from 'codemirror';
 
-import { createWorkerClient } from './worker-client.js';
+import { createWorkerTransportFactory } from './worker-transport-factory.js';
 
+/*
+
+import { createWorkerClient } from './worker-client.js';
 // Worker クライアントの初期化
 const workerClient = await createWorkerClient('./js/worker.js', {
   debug: true,
 });
 
+
+
+
 // LSPClient を生成して接続
 const client = new LSPClient({
   extensions: languageServerExtensions(),
 }).connect(workerClient.transport);
+*/
+
+
+
+
+const { transport } = await createWorkerTransportFactory('./js/worker.js', { debug: true, readyTimeout: 5000 });
+// transport は LSPTransportAdapter -> LSPClient と互換
+const client = new LSPClient({ extensions: languageServerExtensions() }).connect(transport);
+
+
 
 // Editor 設定
 const initialCode = `// demo\nconst x = 1;\nconsole.\n`;

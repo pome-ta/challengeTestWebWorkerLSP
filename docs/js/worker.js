@@ -490,6 +490,8 @@ class LSPWorker {
     }
     // Workerのメッセージハンドラを設定
     self.onmessage = (event) => this.#onMessage(event);
+    // 例えば LSPWorker.constructor() の最後、または VFS 初期化が完了した直後に:
+    self.postMessage({ method: '__ready' });
   }
 
   /**
