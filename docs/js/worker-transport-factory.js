@@ -1,4 +1,4 @@
-// worker-transport-factory.js
+// worker-transport-factory.js v0.5
 // createWorkerTransportFactory(workerUrl, options)
 //  - WorkerTransport を生成して返すファクトリ (transport専用)
 //  - ID発行 / pending管理 は行わない（LSPClient 側で行う）

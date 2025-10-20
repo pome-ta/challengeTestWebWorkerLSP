@@ -1,4 +1,4 @@
-// worker.js v0.4
+// worker.js v0.5
 /**
  * @file Web Worker上で動作するLSPサーバーの実装。
  * TypeScriptの仮想ファイルシステム(@typescript/vfs)を利用して、

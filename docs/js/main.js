@@ -1,4 +1,5 @@
-// --- main.js v0.4
+// --- main.js v0.5
+
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { autocompletion } from '@codemirror/autocomplete';
@@ -7,25 +8,6 @@ import { languageServerExtensions, LSPClient } from '@codemirror/lsp-client';
 import { basicSetup } from 'codemirror';
 
 import { createWorkerTransportFactory } from './worker-transport-factory.js';
-
-/*
-
-import { createWorkerClient } from './worker-client.js';
-// Worker クライアントの初期化
-const workerClient = await createWorkerClient('./js/worker.js', {
-  debug: true,
-});
-
-
-
-
-// LSPClient を生成して接続
-const client = new LSPClient({
-  extensions: languageServerExtensions(),
-}).connect(workerClient.transport);
-*/
-
-
 
 
 const { transport } = await createWorkerTransportFactory('./js/worker.js', { debug: true, readyTimeout: 5000 });
@@ -72,6 +54,8 @@ const view = new EditorView({
   // },
 });
 
+
+/*
 // cleanup on unload
 window.addEventListener('beforeunload', (ev) => {
   // beforeunloadでは非同期処理の完了は保証されないため、
@@ -81,5 +65,17 @@ window.addEventListener('beforeunload', (ev) => {
     workerClient.exit();
   } finally {
     workerClient.close();
+  }
+});
+*/
+
+// cleanup on unload
+window.addEventListener('beforeunload', () => {
+  try {
+    // LSP 仕様に基づく exit 通知
+    transport.send({ jsonrpc: '2.0', method: 'exit' });
+  } finally {
+    // Worker 側で self.close() が呼ばれるが、念のため明示的に閉じる
+    transport.close();
   }
 });
