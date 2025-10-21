@@ -405,7 +405,66 @@ class LspServerCore {
     return { kind: 'full', items };
   }
 
-  
+  /**
+   * `textDocument/hover` リクエストのハンドラ。
+   * TypeScript の quick info を取得して LSP Hover 形式で返す。
+   * @param {object} params - { textDocument: { uri }, position: { line, character } }
+   * @returns {Promise<null|{contents: {kind: 'markdown'|'plaintext', value: string}, range?: {start,end}}>}
+   */
+  async 'textDocument/hover'(params) {
+    const uri = params?.textDocument?.uri;
+    const position = params?.position;
+    if (!uri || !position) {
+      return null; // LSP: no hover
+    }
+
+    try {
+      await this.#bootVfs();
+      const path = this.#uriToPath(uri);
+      const doc = this.#openFiles.get(uri);
+      const text = doc?.text ?? '';
+      const offset = posToOffset(text, position);
+
+      // TypeScript quick info
+      const info = this.#env.languageService.getQuickInfoAtPosition(path, offset);
+      if (!info) return null;
+
+      // build markdown contents: code block of declaration + documentation
+      const signature = displayPartsToString(info.displayParts);
+      const documentation = displayPartsToString(info.documentation);
+
+      let value = '';
+      if (signature && signature.trim().length > 0) {
+        // show as typescript code block
+        value += '```typescript\n' + signature + '\n```\n';
+      }
+      if (documentation && documentation.trim().length > 0) {
+        // append documentation as markdown (already plain text from TypeScript parts)
+        value += '\n' + documentation + '\n';
+      }
+
+      // compute range from info.textSpan if available
+      let range;
+      if (info.textSpan && typeof info.textSpan.start === 'number') {
+        const startPos = offsetToPos(text, info.textSpan.start);
+        const endPos = offsetToPos(text, info.textSpan.start + (info.textSpan.length ?? 0));
+        range = { start: startPos, end: endPos };
+      }
+
+      return {
+        contents: { kind: 'markdown', value: value || signature || documentation || '' },
+        ...(range ? { range } : {}),
+      };
+    } catch (e) {
+      log('hover failed', e);
+      return null;
+    }
+  }
+
+
+
+
+
   /**
    * スケジュール: 指定URIについて診断を debounce して実行する
    * 呼び出し元: didOpen, didChange
