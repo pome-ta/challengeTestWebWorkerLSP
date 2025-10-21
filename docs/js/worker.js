@@ -268,6 +268,10 @@ class LspServerCore {
 
     this.#updateFile(path, textDocument.text);
     log('didOpen', textDocument.uri);
+    
+    this.#scheduleDiagnostics(textDocument.uri);
+
+
   }
 
   /**
@@ -294,6 +298,7 @@ class LspServerCore {
     this.#openFiles.set(uri, { text });
 
     this.#updateFile(path, text);
+    this.#scheduleDiagnostics(uri);
   }
 
   /**
@@ -399,6 +404,96 @@ class LspServerCore {
     // LSP 3.17仕様に準拠した形式で返す
     return { kind: 'full', items };
   }
+
+  
+  /**
+   * スケジュール: 指定URIについて診断を debounce して実行する
+   * 呼び出し元: didOpen, didChange
+   * @param {string} uri
+   */
+  #scheduleDiagnostics(uri) {
+    try {
+      // 既存タイマーがあればクリアして再スケジュール
+      const prev = this.#_diagTimers.get(uri);
+      if (prev) {
+        clearTimeout(prev);
+      }
+  
+      const timer = setTimeout(async () => {
+        this.#_diagTimers.delete(uri);
+        try {
+          await this.#computeAndPublishDiagnostics(uri);
+        } catch (e) {
+          // ログのみ(診断失敗でワーカ停止させない)
+          log('diagnostics failed for', uri, e);
+        }
+      }, this.#_diagnosticDebounceMs);
+  
+      this.#_diagTimers.set(uri, timer);
+    } catch (e) {
+      log('scheduleDiagnostics error', e);
+    }
+  }
+  
+  /**
+   * 実際に TypeScript から診断を取得して publishDiagnostics 通知を送る
+   * @param {string} uri
+   */
+  async #computeAndPublishDiagnostics(uri) {
+    if (!uri) return;
+  
+    await this.#bootVfs();
+  
+    const doc = this.#openFiles.get(uri);
+    const text = doc?.text ?? '';
+    const path = this.#uriToPath(uri);
+  
+    // Collect diagnostics (syntactic + semantic)
+    let all = [];
+    try {
+      const syntactic = this.#env.languageService.getSyntacticDiagnostics(path) || [];
+      const semantic = this.#env.languageService.getSemanticDiagnostics(path) || [];
+      all = [...syntactic, ...semantic];
+    } catch (e) {
+      log('failed to get diagnostics from TS service for', uri, e);
+      all = [];
+    }
+  
+    // Convert to LSP Diagnostic[]
+    const diagnostics = all.map((d) => {
+      const start = d.start ?? 0;
+      const end = start + (d.length ?? 0);
+      const range = {
+        start: offsetToPos(text, start),
+        end: offsetToPos(text, end),
+      };
+      return {
+        range,
+        message: ts.flattenDiagnosticMessageText(d.messageText, '\n'),
+        severity: (d.category === ts.DiagnosticCategory.Error) ? 1 : 2, // LSP: 1 Error, 2 Warning
+        code: d.code,
+        source: 'typescript',
+      };
+    });
+  
+    // Send publishDiagnostics notification (no id -> notification)
+    try {
+      _send({
+        jsonrpc: '2.0',
+        method: 'textDocument/publishDiagnostics',
+        params: {
+          uri,
+          diagnostics,
+        },
+      });
+      log('published diagnostics for', uri, diagnostics.length, 'items');
+    } catch (e) {
+      log('failed to publish diagnostics for', uri, e);
+    }
+  }
+
+
+
 
   /**
    * TypeScriptのDiagnosticオブジェクトをLSPのDiagnosticオブジェクトに変換する。
