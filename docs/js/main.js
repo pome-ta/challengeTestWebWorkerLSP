@@ -17,7 +17,7 @@ const client = new LSPClient({ extensions: languageServerExtensions() }).connect
 
 
 // Editor 設定
-const initialCode = `// demo\nconst x = 1;\nconsole.\n`;
+const initialCode = `// demo\nconst x = 1;\nconsole.log();\nx = 1;\nhoge = 1;\n`;
 
 const customTheme = EditorView.theme(
   {
