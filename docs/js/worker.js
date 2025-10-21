@@ -155,6 +155,12 @@ class LspServerCore {
   #bootPromise = null;
   /** @type {Map<string, {text: string, version?: number}>} - 開かれているファイルのURIと内容を保持するマップ */
   #openFiles = new Map();
+  
+  // デバッグ可能な遅延(ms)
+  #_diagnosticDebounceMs = 200;
+  
+  // Map<uri, timeoutId>
+  #_diagTimers = new Map();
 
   /**
    * `initialize`リクエストのハンドラ。

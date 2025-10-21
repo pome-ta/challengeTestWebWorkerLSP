@@ -69,13 +69,17 @@ window.addEventListener('beforeunload', (ev) => {
 });
 */
 
-// cleanup on unload
+// --- LSP ライフサイクル cleanup
 window.addEventListener('beforeunload', () => {
+  // beforeunloadでは非同期完了は保証されないため、
+  // Request系はawaitせず同期的に発火する。
   try {
-    // LSP 仕様に基づく exit 通知
+    // LSP準拠: shutdown → exit の順
+    transport.send({ jsonrpc: '2.0', id: 9999, method: 'shutdown', params: {} });
     transport.send({ jsonrpc: '2.0', method: 'exit' });
+  } catch (e) {
+    console.warn('[main] LSP shutdown/exit failed', e);
   } finally {
-    // Worker 側で self.close() が呼ばれるが、念のため明示的に閉じる
-    transport.close();
+    transport.close?.();
   }
 });
