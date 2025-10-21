@@ -1,4 +1,4 @@
-// --- main.js v0.5
+// --- main.js v0.7
 
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
@@ -10,7 +10,7 @@ import { basicSetup } from 'codemirror';
 import { createWorkerTransportFactory } from './worker-transport-factory.js';
 
 
-const { transport } = await createWorkerTransportFactory('./js/worker.js', { debug: true, readyTimeout: 5000 });
+const { transport } = await createWorkerTransportFactory('./js/worker.js', { debug: true, });
 // transport は LSPTransportAdapter -> LSPClient と互換
 const client = new LSPClient({ extensions: languageServerExtensions() }).connect(transport);
 
@@ -55,19 +55,6 @@ const view = new EditorView({
 });
 
 
-/*
-// cleanup on unload
-window.addEventListener('beforeunload', (ev) => {
-  // beforeunloadでは非同期処理の完了は保証されないため、
-  // 通知(notify)を送り、同期的にリソースを解放する。
-  try {
-    workerClient.shutdown(); // awaitしない
-    workerClient.exit();
-  } finally {
-    workerClient.close();
-  }
-});
-*/
 
 // --- LSP ライフサイクル cleanup
 window.addEventListener('beforeunload', () => {

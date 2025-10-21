@@ -1,4 +1,4 @@
-// worker.js v0.5
+// worker.js v0.7
 /**
  * @file Web Worker上で動作するLSPサーバーの実装。
  * TypeScriptの仮想ファイルシステム(@typescript/vfs)を利用して、
@@ -157,7 +157,7 @@ class LspServerCore {
   #openFiles = new Map();
   
   // デバッグ可能な遅延(ms)
-  #_diagnosticDebounceMs = 200;
+  #_diagnosticDebounceMs = 500;
   
   // Map<uri, timeoutId>
   #_diagTimers = new Map();
@@ -270,8 +270,6 @@ class LspServerCore {
     log('didOpen', textDocument.uri);
     
     this.#scheduleDiagnostics(textDocument.uri);
-
-
   }
 
   /**
@@ -406,6 +404,19 @@ class LspServerCore {
   }
 
   /**
+   * TypeScript の QuickInfo.displayParts から
+   * 型の概要のみを抽出して文字列化する簡易関数。
+   * 冗長な "const", "let", "function" などを省く。
+   */
+  #extractTypeSummary(displayParts = []) {
+    if (!Array.isArray(displayParts)) return '';
+    const filtered = displayParts.filter(p => {
+      // 除外対象: キーワード・空白・句読点・改行
+      return !['keyword', 'punctuation', 'space'].includes(p.kind);
+    });
+    return filtered.map(p => p.text).join('').trim();
+  }
+  /**
    * `textDocument/hover` リクエストのハンドラ。
    * TypeScript の quick info を取得して LSP Hover 形式で返す。
    * @param {object} params - { textDocument: { uri }, position: { line, character } }
@@ -431,6 +442,8 @@ class LspServerCore {
 
       // build markdown contents: code block of declaration + documentation
       const signature = displayPartsToString(info.displayParts);
+      //const signature = this.#extractTypeSummary(info.displayParts);
+      //const signature = '';
       const documentation = displayPartsToString(info.documentation);
 
       let value = '';
@@ -460,9 +473,6 @@ class LspServerCore {
       return null;
     }
   }
-
-
-
 
 
   /**
@@ -550,9 +560,6 @@ class LspServerCore {
       log('failed to publish diagnostics for', uri, e);
     }
   }
-
-
-
 
   /**
    * TypeScriptのDiagnosticオブジェクトをLSPのDiagnosticオブジェクトに変換する。
@@ -737,3 +744,4 @@ class LSPWorker {
 
 // Workerのインスタンスを作成し、メッセージの待受を開始する
 new LSPWorker();
+
