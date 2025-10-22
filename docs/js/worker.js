@@ -143,6 +143,7 @@ class LspServerCore {
       resolveProvider: true, // `completionItem/resolve` をサポート
     },
     hoverProvider: true, // `textDocument/hover` をサポート
+    signatureHelpProvider: { triggerCharacters: ['(', ','] },
   };
 
   /** @type {Map<string, string> | null} - TypeScriptのVFS用のデフォルトファイルマップ */
@@ -474,7 +475,60 @@ class LspServerCore {
     }
   }
 
+  /**
+   * `textDocument/signatureHelp` リクエストのハンドラ。
+   * @param {object} params - LSP の signatureHelp パラメータ。
+   * @returns {Promise<object>} LSP の SignatureHelp レスポンス。
+   */
+  async 'textDocument/signatureHelp'(params) {
+    const { textDocument, position } = params ?? {};
+    const uri = textDocument?.uri;
+    if (!uri || !position) {
+      return { signatures: [], activeSignature: 0, activeParameter: 0 };
+    }
 
+    await this.#bootVfs();
+    const path = this.#uriToPath(uri);
+    const doc = this.#openFiles.get(uri);
+    const offset = posToOffset(doc?.text ?? '', position);
+
+    try {
+      const help = this.#env.languageService.getSignatureHelpItems(
+        path,
+        offset,
+        {}
+      );
+
+      if (!help || !help.items?.length) {
+        return { signatures: [], activeSignature: 0, activeParameter: 0 };
+      }
+
+      const signatures = help.items.map((item) => {
+        const label = `${item.prefixDisplayParts.map(p => p.text).join('')}${item.parameters
+          .map(p => p.displayParts.map(dp => dp.text).join(''))
+          .join(item.separatorDisplayParts.map(p => p.text).join(''))}${item.suffixDisplayParts.map(p => p.text).join('')}`;
+
+        return {
+          label,
+          documentation: item.documentation?.map(d => d.text).join('') ?? '',
+          parameters: item.parameters.map(p => ({
+            label: p.displayParts.map(dp => dp.text).join(''),
+            documentation: p.documentation?.map(d => d.text).join('') ?? ''
+          })),
+        };
+      });
+
+      return {
+        signatures,
+        activeSignature: help.selectedItemIndex ?? 0,
+        activeParameter: help.argumentIndex ?? 0,
+      };
+    } catch (e) {
+      log('signatureHelp failed', e);
+      return { signatures: [], activeSignature: 0, activeParameter: 0 };
+    }
+  }
+  
   /**
    * スケジュール: 指定URIについて診断を debounce して実行する
    * 呼び出し元: didOpen, didChange
