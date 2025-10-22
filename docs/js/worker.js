@@ -141,7 +141,7 @@ class LspServerCore {
     textDocumentSync: 1, // 1: Full. ドキュメントの同期は常に全内容を送信する。
     completionProvider: {
       resolveProvider: true, // `completionItem/resolve` をサポート
-      triggerCharacters: ['.', '"', "'", '`'],  // triggerCharacter を見て自動送信
+      triggerCharacters: ['.', '"', "'", '`'], // triggerCharacter を見て自動送信
     },
     hoverProvider: true, // `textDocument/hover` をサポート
     signatureHelpProvider: { triggerCharacters: ['(', ','] },
@@ -157,10 +157,10 @@ class LspServerCore {
   #bootPromise = null;
   /** @type {Map<string, {text: string, version?: number}>} - 開かれているファイルのURIと内容を保持するマップ */
   #openFiles = new Map();
-  
+
   // デバッグ可能な遅延(ms)
   #_diagnosticDebounceMs = 500;
-  
+
   // Map<uri, timeoutId>
   #_diagTimers = new Map();
 
@@ -270,7 +270,7 @@ class LspServerCore {
 
     this.#updateFile(path, textDocument.text);
     log('didOpen', textDocument.uri);
-    
+
     this.#scheduleDiagnostics(textDocument.uri);
   }
 
@@ -412,11 +412,14 @@ class LspServerCore {
    */
   #extractTypeSummary(displayParts = []) {
     if (!Array.isArray(displayParts)) return '';
-    const filtered = displayParts.filter(p => {
+    const filtered = displayParts.filter((p) => {
       // 除外対象: キーワード・空白・句読点・改行
       return !['keyword', 'punctuation', 'space'].includes(p.kind);
     });
-    return filtered.map(p => p.text).join('').trim();
+    return filtered
+      .map((p) => p.text)
+      .join('')
+      .trim();
   }
   /**
    * `textDocument/hover` リクエストのハンドラ。
@@ -439,7 +442,10 @@ class LspServerCore {
       const offset = posToOffset(text, position);
 
       // TypeScript quick info
-      const info = this.#env.languageService.getQuickInfoAtPosition(path, offset);
+      const info = this.#env.languageService.getQuickInfoAtPosition(
+        path,
+        offset
+      );
       if (!info) return null;
 
       // build markdown contents: code block of declaration + documentation
@@ -462,12 +468,18 @@ class LspServerCore {
       let range;
       if (info.textSpan && typeof info.textSpan.start === 'number') {
         const startPos = offsetToPos(text, info.textSpan.start);
-        const endPos = offsetToPos(text, info.textSpan.start + (info.textSpan.length ?? 0));
+        const endPos = offsetToPos(
+          text,
+          info.textSpan.start + (info.textSpan.length ?? 0)
+        );
         range = { start: startPos, end: endPos };
       }
 
       return {
-        contents: { kind: 'markdown', value: value || signature || documentation || '' },
+        contents: {
+          kind: 'markdown',
+          value: value || signature || documentation || '',
+        },
         ...(range ? { range } : {}),
       };
     } catch (e) {
@@ -475,9 +487,6 @@ class LspServerCore {
       return null;
     }
   }
-
-  
-
 
   /**
    * `textDocument/signatureHelp` リクエストのハンドラ。
@@ -489,32 +498,41 @@ class LspServerCore {
     const uri = params?.textDocument?.uri;
     const position = params?.position;
     if (!uri || !position) return null;
-  
+
     try {
       await this.#bootVfs();
       const path = this.#uriToPath(uri);
       const doc = this.#openFiles.get(uri);
       const text = doc?.text ?? '';
       const offset = posToOffset(text, position);
-  
+
       // TypeScript の signature help を取得
       // getSignatureHelpItems(fileName, position, options)
-      const helpItems = this.#env.languageService.getSignatureHelpItems(path, offset, undefined);
+      const helpItems = this.#env.languageService.getSignatureHelpItems(
+        path,
+        offset,
+        undefined
+      );
       if (!helpItems) return null;
-  
+
       // TypeScript の SignatureHelpItems -> LSP SignatureHelp へ変換
       const signatures = (helpItems.items || []).map((item) => {
         // シグネチャラベル(displayParts を結合)
-        const label = displayPartsToString(item.prefixDisplayParts)
-          + (item.parameters || []).map((p, i) => {
-              const paramText = displayPartsToString(item.parameters[i]?.displayParts ?? []);
+        const label =
+          displayPartsToString(item.prefixDisplayParts) +
+          (item.parameters || [])
+            .map((p, i) => {
+              const paramText = displayPartsToString(
+                item.parameters[i]?.displayParts ?? []
+              );
               return paramText;
-            }).join(displayPartsToString(item.separatorDisplayParts) || ',')
-          + displayPartsToString(item.suffixDisplayParts);
-  
+            })
+            .join(displayPartsToString(item.separatorDisplayParts) || ',') +
+          displayPartsToString(item.suffixDisplayParts);
+
         // ドキュメント(documentationParts がある場合)
         const documentation = displayPartsToString(item.documentation ?? []);
-  
+
         // パラメータ配列を LSP 形式に
         const parameters = (item.parameters || []).map((p) => {
           return {
@@ -522,18 +540,24 @@ class LspServerCore {
             documentation: displayPartsToString(p.documentation ?? []),
           };
         });
-  
+
         return {
           label,
           documentation: documentation || undefined,
           parameters,
         };
       });
-  
+
       // TypeScript が示す activeSignature/activeParameter の情報があればそれを使う
-      const activeSignature = typeof helpItems.selectedItemIndex === 'number' ? helpItems.selectedItemIndex : 0;
-      const activeParameter = typeof helpItems.argumentIndex === 'number' ? helpItems.argumentIndex : 0;
-  
+      const activeSignature =
+        typeof helpItems.selectedItemIndex === 'number'
+          ? helpItems.selectedItemIndex
+          : 0;
+      const activeParameter =
+        typeof helpItems.argumentIndex === 'number'
+          ? helpItems.argumentIndex
+          : 0;
+
       return {
         signatures,
         activeSignature,
@@ -544,7 +568,7 @@ class LspServerCore {
       return null;
     }
   }
-  
+
   /**
    * スケジュール: 指定URIについて診断を debounce して実行する
    * 呼び出し元: didOpen, didChange
@@ -557,7 +581,7 @@ class LspServerCore {
       if (prev) {
         clearTimeout(prev);
       }
-  
+
       const timer = setTimeout(async () => {
         this.#_diagTimers.delete(uri);
         try {
@@ -567,37 +591,39 @@ class LspServerCore {
           log('diagnostics failed for', uri, e);
         }
       }, this.#_diagnosticDebounceMs);
-  
+
       this.#_diagTimers.set(uri, timer);
     } catch (e) {
       log('scheduleDiagnostics error', e);
     }
   }
-  
+
   /**
    * 実際に TypeScript から診断を取得して publishDiagnostics 通知を送る
    * @param {string} uri
    */
   async #computeAndPublishDiagnostics(uri) {
     if (!uri) return;
-  
+
     await this.#bootVfs();
-  
+
     const doc = this.#openFiles.get(uri);
     const text = doc?.text ?? '';
     const path = this.#uriToPath(uri);
-  
+
     // Collect diagnostics (syntactic + semantic)
     let all = [];
     try {
-      const syntactic = this.#env.languageService.getSyntacticDiagnostics(path) || [];
-      const semantic = this.#env.languageService.getSemanticDiagnostics(path) || [];
+      const syntactic =
+        this.#env.languageService.getSyntacticDiagnostics(path) || [];
+      const semantic =
+        this.#env.languageService.getSemanticDiagnostics(path) || [];
       all = [...syntactic, ...semantic];
     } catch (e) {
       log('failed to get diagnostics from TS service for', uri, e);
       all = [];
     }
-  
+
     // Convert to LSP Diagnostic[]
     const diagnostics = all.map((d) => {
       const start = d.start ?? 0;
@@ -609,12 +635,12 @@ class LspServerCore {
       return {
         range,
         message: ts.flattenDiagnosticMessageText(d.messageText, '\n'),
-        severity: (d.category === ts.DiagnosticCategory.Error) ? 1 : 2, // LSP: 1 Error, 2 Warning
+        severity: d.category === ts.DiagnosticCategory.Error ? 1 : 2, // LSP: 1 Error, 2 Warning
         code: d.code,
         source: 'typescript',
       };
     });
-  
+
     // Send publishDiagnostics notification (no id -> notification)
     try {
       _send({
@@ -814,4 +840,3 @@ class LSPWorker {
 
 // Workerのインスタンスを作成し、メッセージの待受を開始する
 new LSPWorker();
-

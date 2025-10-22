@@ -9,12 +9,13 @@ import { basicSetup } from 'codemirror';
 
 import { createWorkerTransportFactory } from './worker-transport-factory.js';
 
-
-const { transport } = await createWorkerTransportFactory('./js/worker.js', { debug: true, });
+const { transport } = await createWorkerTransportFactory('./js/worker.js', {
+  debug: true,
+});
 // transport は LSPTransportAdapter -> LSPClient と互換
-const client = new LSPClient({ extensions: languageServerExtensions() }).connect(transport);
-
-
+const client = new LSPClient({
+  extensions: languageServerExtensions(),
+}).connect(transport);
 
 // Editor 設定
 const initialCode = `// demo\nconst x = 1;\nconsole.log();\nx = 1;\nhoge = 1;\n`;
@@ -54,15 +55,18 @@ const view = new EditorView({
   // },
 });
 
-
-
 // --- LSP ライフサイクル cleanup
 window.addEventListener('beforeunload', () => {
   // beforeunloadでは非同期完了は保証されないため、
   // Request系はawaitせず同期的に発火する。
   try {
     // LSP準拠: shutdown → exit の順
-    transport.send({ jsonrpc: '2.0', id: 9999, method: 'shutdown', params: {} });
+    transport.send({
+      jsonrpc: '2.0',
+      id: 9999,
+      method: 'shutdown',
+      params: {},
+    });
     transport.send({ jsonrpc: '2.0', method: 'exit' });
   } catch (e) {
     console.warn('[main] LSP shutdown/exit failed', e);
