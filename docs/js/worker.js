@@ -1,4 +1,4 @@
-// worker.js v0.7
+// worker.js v0.8
 /**
  * @file Web Worker上で動作するLSPサーバーの実装。
  * TypeScriptの仮想ファイルシステム(@typescript/vfs)を利用して、
@@ -475,57 +475,72 @@ class LspServerCore {
     }
   }
 
+  
+
+
   /**
    * `textDocument/signatureHelp` リクエストのハンドラ。
-   * @param {object} params - LSP の signatureHelp パラメータ。
-   * @returns {Promise<object>} LSP の SignatureHelp レスポンス。
+   * TypeScript の signature help を取得して LSP の SignatureHelp 形式で返す。
+   * @param {{ textDocument: { uri: string }, position: { line:number, character:number } }} params
+   * @returns {Promise<null | { signatures: Array, activeSignature?: number, activeParameter?: number }>}
    */
   async 'textDocument/signatureHelp'(params) {
-    const { textDocument, position } = params ?? {};
-    const uri = textDocument?.uri;
-    if (!uri || !position) {
-      return { signatures: [], activeSignature: 0, activeParameter: 0 };
-    }
-
-    await this.#bootVfs();
-    const path = this.#uriToPath(uri);
-    const doc = this.#openFiles.get(uri);
-    const offset = posToOffset(doc?.text ?? '', position);
-
+    const uri = params?.textDocument?.uri;
+    const position = params?.position;
+    if (!uri || !position) return null;
+  
     try {
-      const help = this.#env.languageService.getSignatureHelpItems(
-        path,
-        offset,
-        {}
-      );
-
-      if (!help || !help.items?.length) {
-        return { signatures: [], activeSignature: 0, activeParameter: 0 };
-      }
-
-      const signatures = help.items.map((item) => {
-        const label = `${item.prefixDisplayParts.map(p => p.text).join('')}${item.parameters
-          .map(p => p.displayParts.map(dp => dp.text).join(''))
-          .join(item.separatorDisplayParts.map(p => p.text).join(''))}${item.suffixDisplayParts.map(p => p.text).join('')}`;
-
+      await this.#bootVfs();
+      const path = this.#uriToPath(uri);
+      const doc = this.#openFiles.get(uri);
+      const text = doc?.text ?? '';
+      const offset = posToOffset(text, position);
+  
+      // TypeScript の signature help を取得
+      // getSignatureHelpItems(fileName, position, options)
+      const helpItems = this.#env.languageService.getSignatureHelpItems(path, offset, undefined);
+      if (!helpItems) return null;
+  
+      // TypeScript の SignatureHelpItems -> LSP SignatureHelp へ変換
+      const signatures = (helpItems.items || []).map((item) => {
+        // シグネチャラベル(displayParts を結合)
+        const label = displayPartsToString(item.prefixDisplayParts)
+          + (item.parameters || []).map((p, i) => {
+              const paramText = displayPartsToString(item.parameters[i]?.displayParts ?? []);
+              return paramText;
+            }).join(displayPartsToString(item.separatorDisplayParts) || ',')
+          + displayPartsToString(item.suffixDisplayParts);
+  
+        // ドキュメント(documentationParts がある場合)
+        const documentation = displayPartsToString(item.documentation ?? []);
+  
+        // パラメータ配列を LSP 形式に
+        const parameters = (item.parameters || []).map((p) => {
+          return {
+            label: displayPartsToString(p.displayParts) || p.name || '',
+            documentation: displayPartsToString(p.documentation ?? []),
+          };
+        });
+  
         return {
           label,
-          documentation: item.documentation?.map(d => d.text).join('') ?? '',
-          parameters: item.parameters.map(p => ({
-            label: p.displayParts.map(dp => dp.text).join(''),
-            documentation: p.documentation?.map(d => d.text).join('') ?? ''
-          })),
+          documentation: documentation || undefined,
+          parameters,
         };
       });
-
+  
+      // TypeScript が示す activeSignature/activeParameter の情報があればそれを使う
+      const activeSignature = typeof helpItems.selectedItemIndex === 'number' ? helpItems.selectedItemIndex : 0;
+      const activeParameter = typeof helpItems.argumentIndex === 'number' ? helpItems.argumentIndex : 0;
+  
       return {
         signatures,
-        activeSignature: help.selectedItemIndex ?? 0,
-        activeParameter: help.argumentIndex ?? 0,
+        activeSignature,
+        activeParameter,
       };
     } catch (e) {
       log('signatureHelp failed', e);
-      return { signatures: [], activeSignature: 0, activeParameter: 0 };
+      return null;
     }
   }
   

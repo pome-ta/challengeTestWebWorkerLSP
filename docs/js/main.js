@@ -1,4 +1,4 @@
-// --- main.js v0.7
+// --- main.js v0.8
 
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';

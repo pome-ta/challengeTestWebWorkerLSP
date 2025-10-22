@@ -1,4 +1,4 @@
-// worker-transport.js v0.7
+// worker-transport.js v0.8
 
 // - LSP Client と Web Worker の間を仲介する Transport クラス
 // - createWorkerTransport(workerUrl) -> Promise<WorkerTransport>
