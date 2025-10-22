@@ -13,7 +13,10 @@
 //   // transport は LSPClient に渡す (adapter済み)
 //   // rawTransport は生の WorkerTransport (subscribe(..., {format:'raw'} ) などで使える)
 
-import { createWorkerTransport, LSPTransportAdapter } from './worker-transport.js';
+import {
+  createWorkerTransport,
+  LSPTransportAdapter,
+} from './worker-transport.js';
 
 /**
  * createWorkerTransportFactory
@@ -33,12 +36,16 @@ export async function createWorkerTransportFactory(workerUrl, options = {}) {
   //    where the worker takes time to bootstrap dependencies (e.g. @typescript/vfs).
   //    The worker must postMessage({ method: '__ready' }) (object form) when ready.
   if (waitForReady) {
-    await _awaitWorkerReady(rawTransport.worker, { debug, timeoutMs: readyTimeout });
+    await _awaitWorkerReady(rawTransport.worker, {
+      debug,
+      timeoutMs: readyTimeout,
+    });
   } else {
     if (debug) console.debug('[worker-transport-factory] skip waitForReady');
   }
 
-  if (debug) console.debug('[worker-transport-factory] transport ready', { workerUrl });
+  if (debug)
+    console.debug('[worker-transport-factory] transport ready', { workerUrl });
 
   return { transport: adapter, rawTransport, worker: rawTransport.worker };
 }
@@ -57,7 +64,10 @@ function _awaitWorkerReady(worker, opts = {}) {
 
   return new Promise((resolve) => {
     if (!worker) {
-      if (debug) console.debug('[worker-transport-factory] no worker instance; skipping ready wait');
+      if (debug)
+        console.debug(
+          '[worker-transport-factory] no worker instance; skipping ready wait'
+        );
       resolve();
       return;
     }
@@ -67,8 +77,11 @@ function _awaitWorkerReady(worker, opts = {}) {
       try {
         const data = ev.data;
         // Accept object shape { method: "__ready" } OR { __ready: true } to be tolerant
-        if (data && ((data.method === '__ready') || data.__ready === true)) {
-          if (debug) console.debug('[worker-transport-factory] received __ready from worker');
+        if (data && (data.method === '__ready' || data.__ready === true)) {
+          if (debug)
+            console.debug(
+              '[worker-transport-factory] received __ready from worker'
+            );
           cleanup();
           resolve();
         }
@@ -81,7 +94,10 @@ function _awaitWorkerReady(worker, opts = {}) {
       if (done) return;
       done = true;
       worker.removeEventListener('message', onMessage);
-      if (debug) console.warn('[worker-transport-factory] worker ready timeout, proceeding anyway');
+      if (debug)
+        console.warn(
+          '[worker-transport-factory] worker ready timeout, proceeding anyway'
+        );
       resolve();
     };
 
