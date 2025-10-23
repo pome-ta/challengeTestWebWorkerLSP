@@ -4,7 +4,10 @@ import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { autocompletion } from '@codemirror/autocomplete';
 import { typescriptLanguage } from '@codemirror/lang-javascript';
+
+import {oneDark} from '@codemirror/theme-one-dark';
 import { languageServerExtensions, LSPClient } from '@codemirror/lsp-client';
+
 import { basicSetup } from 'codemirror';
 
 import { createWorkerTransportFactory } from './worker-transport-factory.js';
@@ -60,6 +63,7 @@ const extensions = [
   typescriptLanguage,
   autocompletion({ activateOnTyping: true }),
   client.plugin('file:///main.ts'),
+  oneDark,
 ];
 
 const state = EditorState.create({
