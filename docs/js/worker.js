@@ -241,10 +241,27 @@ class LspServerCore {
       const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, {
         allowJs: true,
       });
+      
+      /*
+      env.compilerOptions = {
+        ...env.compilerOptions,
+        //target: ts.ScriptTarget.ES2022,
+        //module: ts.ModuleKind.ESNext,
+        allowJs: true,
+        checkJs: true,
+        strict: true,
+        noUnusedLocals: true,
+        noUnusedParameters: true,
+        noImplicitAny: true,
+      };
+      */
+      
+      
       this.#defaultMap = defaultMap;
       this.#system = system;
       this.#env = env;
       log('vfs booted (ts:', ts.version, ')');
+      self.postMessage({ method: '__ready' });
       return env;
     })();
     return this.#bootPromise;
@@ -754,7 +771,7 @@ class LSPWorker {
     // Workerのメッセージハンドラを設定
     self.onmessage = (event) => this.#onMessage(event);
     // 例えば LSPWorker.constructor() の最後、または VFS 初期化が完了した直後に:
-    self.postMessage({ method: '__ready' });
+    //self.postMessage({ method: '__ready' });
   }
 
   /**

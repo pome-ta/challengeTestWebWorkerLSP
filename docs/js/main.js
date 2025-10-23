@@ -63,7 +63,7 @@ const extensions = [
   typescriptLanguage,
   autocompletion({ activateOnTyping: true }),
   client.plugin('file:///main.ts'),
-  oneDark,
+  //oneDark,
 ];
 
 const state = EditorState.create({
