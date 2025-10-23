@@ -18,7 +18,30 @@ const client = new LSPClient({
 }).connect(transport);
 
 // Editor 設定
-const initialCode = `// demo\nconst x = 1;\nconsole.log();\nx = 1;\nhoge = 1;\n`;
+//const initialCode = `// demo\nconst x = 1;\nconsole.log();\nx = 1;\nhoge = 1;\n`;
+
+const initialCode = `// @ts-check
+
+// Error: 存在しない変数を使用
+console.log(notDefinedVar);
+
+// Warning: 宣言したが未使用
+const unusedValue = 42;
+
+// Information: JSDoc コメントからの型推論表示を確認
+/**
+ * Adds two numbers together.
+ * @param {number} a
+ * @param {number} b
+ */
+function add(a, b) {
+  return a + b;
+}
+
+// Hint: 意図的に '==' を使用 → LSP が "use '===' instead" の提案を出す場合がある
+if (1 == '1') {
+  console.log('hint test');
+}`
 
 const customTheme = EditorView.theme(
   {
