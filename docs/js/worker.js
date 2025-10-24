@@ -232,7 +232,11 @@ class LspServerCore {
     this.#bootPromise ??= (async () => {
       // CDNからTypeScriptの型定義ファイル(.d.ts)をダウンロードしてVFSを初期化
       const defaultMap = await vfs.createDefaultMapFromCDN(
-        { target: ts.ScriptTarget.ES2020 },
+        {
+          target: ts.ScriptTarget.ES2020,
+          //lib: ['es2022', 'dom',], 
+          module: ts.ModuleKind.ESNext,
+        },
         ts.version,
         false,
         ts
