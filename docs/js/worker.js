@@ -75,7 +75,8 @@ function offsetToPos(text, offset) {
  * @returns {string} 結合された文字列。
  */
 function displayPartsToString(parts) {
-  return parts?.map((p) => p.text).join('') ?? '';
+  //return parts?.map((p) => p.text).join('') ?? '';
+  return ts.displayPartsToString(parts);
 }
 
 // --- LSPとTypeScriptの型マッピング ---
