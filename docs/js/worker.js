@@ -234,7 +234,7 @@ class LspServerCore {
       const defaultMap = await vfs.createDefaultMapFromCDN(
         {
           target: ts.ScriptTarget.ES2020,
-          //lib: ['es2022', 'dom',], 
+          //lib: ['es2022', 'dom',],
           module: ts.ModuleKind.ESNext,
         },
         ts.version,
@@ -246,7 +246,7 @@ class LspServerCore {
       const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, {
         allowJs: true,
       });
-      
+
       /*
       env.compilerOptions = {
         ...env.compilerOptions,
@@ -260,8 +260,7 @@ class LspServerCore {
         noImplicitAny: true,
       };
       */
-      
-      
+
       this.#defaultMap = defaultMap;
       this.#system = system;
       this.#env = env;

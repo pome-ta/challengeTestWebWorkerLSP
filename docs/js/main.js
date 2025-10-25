@@ -5,7 +5,7 @@ import { EditorView } from '@codemirror/view';
 import { autocompletion } from '@codemirror/autocomplete';
 import { typescriptLanguage } from '@codemirror/lang-javascript';
 
-import {oneDark} from '@codemirror/theme-one-dark';
+import { oneDark } from '@codemirror/theme-one-dark';
 import { languageServerExtensions, LSPClient } from '@codemirror/lsp-client';
 
 import { basicSetup } from 'codemirror';
@@ -44,7 +44,7 @@ function add(a, b) {
 // Hint: 意図的に '==' を使用 → LSP が "use '===' instead" の提案を出す場合がある
 if (1 == '1') {
   console.log('hint test');
-}`
+}`;
 
 const customTheme = EditorView.theme(
   {
