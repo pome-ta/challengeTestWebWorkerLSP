@@ -15,12 +15,24 @@ import { createWorkerTransportFactory } from './client/worker-transport-factory.
 const { transport } = await createWorkerTransportFactory(
   './js/server/worker.js',
   {
+    waitForReady: true, // サーバーの準備完了通知(__ready)を待つ
     debug: true,
   }
 );
+
 // transport は LSPTransportAdapter -> LSPClient と互換
 const client = new LSPClient({
   extensions: languageServerExtensions(),
+  // サーバーに渡す初期設定。
+  // この設定は、クライアント接続後に `workspace/didChangeConfiguration` 通知としてサーバーに送信される。
+  workspaceConfiguration: {
+    typescript: {
+      // 例として、未使用変数の警告を無効にしてみる
+      // これにより、サーバーの noUnusedLocals, noUnusedParameters が上書きされる
+      // noUnusedLocals: false,
+      // noUnusedParameters: false,
+    },
+  },
 }).connect(transport);
 
 // Editor 設定

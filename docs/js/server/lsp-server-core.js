@@ -67,6 +67,27 @@ const TS_KIND_TO_LSP_KIND_MAP = {
   text: CompletionItemKind.Text,
 };
 
+const SymbolKind = {
+  File: 1,
+  Module: 2,
+  Namespace: 3,
+  Package: 4,
+  Class: 5,
+  Method: 6,
+  Property: 7,
+  Field: 8,
+  Constructor: 9,
+  Enum: 10,
+  Interface: 11,
+  Function: 12,
+  Variable: 13,
+  Constant: 14,
+  String: 15,
+  Number: 16,
+  Boolean: 17,
+  Array: 18,
+};
+
 function mapTsKindToLsp(tsKind) {
   return TS_KIND_TO_LSP_KIND_MAP[tsKind] ?? CompletionItemKind.Variable;
 }
@@ -86,6 +107,14 @@ export class LspServerCore {
       resolveProvider: true, // `completionItem/resolve` をサポート
       triggerCharacters: ['.', '"', "'", '`'], // triggerCharacter を見て自動送信
     },
+    workspace: {
+      workspaceFolders: {
+        supported: true,
+      },
+      // `workspace/didChangeConfiguration`通知を受け取ることをクライアントに伝える
+      didChangeConfiguration: {},
+    },
+    workspaceSymbolProvider: true, // `workspace/symbol` をサポート
     hoverProvider: true, // `textDocument/hover` をサポート
     signatureHelpProvider: { triggerCharacters: ['(', ','] },
   };
@@ -100,6 +129,8 @@ export class LspServerCore {
   #bootPromise = null;
   /** @type {Map<string, {text: string, version?: number}>} - URIをキーとするオープン中のファイル情報 */
   #openFiles = new Map();
+  /** @type {ts.CompilerOptions} - 現在のTypeScriptコンパイラオプション */
+  #compilerOptions;
 
   // デバッグ可能な遅延(ms)
   #_diagnosticDebounceMs = 500;
@@ -184,16 +215,21 @@ export class LspServerCore {
       );
       const system = vfs.createSystem(defaultMap);
 
-      // LSPサーバーがコードを解析する際のルールを定義
-      const compilerOptions = {
-        // 生成するJSのバージョンを指定。'ES2015'以上でないとプライベート識別子(#)などでエラーになる
-        target: ts.ScriptTarget.ES2022,
-        moduleResolution: ts.ModuleResolutionKind.Bundler, // URLベースのimportなど、モダンなモジュール解決を許可する
-        allowArbitraryExtensions: true, // .js や .ts 以外の拡張子を持つファイルをインポートできるようにする
+      // LSPサーバーがコードを解析する際の初期ルールを定義
+      this.#compilerOptions = {
+        target: ts.ScriptTarget.ES2022, // プライベート識別子(#)などの新しい構文をサポート
+
+        //moduleResolution: ts.ModuleResolutionKind.Bundler, // クライアントコード内のURLベースのimportを許可
+
+        moduleResolution: ts.ModuleResolutionKind.Bundler, // クライアントコード内のURLベースのimportを許可
         allowJs: true, // .js ファイルのコンパイルを許可する
+
         checkJs: true, // .js ファイルに対しても型チェックを行う (JSDocと連携)
+
         strict: true, // すべての厳格な型チェックオプションを有効にする (noImplicitAnyなどを含む)
+
         noUnusedLocals: true, // 未使用のローカル変数をエラーとして報告する
+
         noUnusedParameters: true, // 未使用の関数パラメータをエラーとして報告する
       };
 
@@ -202,7 +238,7 @@ export class LspServerCore {
         system,
         [],
         ts,
-        compilerOptions
+        this.#compilerOptions
       );
 
       this.#defaultMap = defaultMap;
@@ -235,8 +271,6 @@ export class LspServerCore {
 
     this.#updateFile(path, textDocument.text);
     log('didOpen', textDocument.uri);
-    // todo: 重複？
-    //this.#scheduleDiagnostics(textDocument.uri);
   }
 
   /**
@@ -263,8 +297,6 @@ export class LspServerCore {
     this.#openFiles.set(uri, { text });
 
     this.#updateFile(path, text);
-    // todo: 重複?
-    //this.#scheduleDiagnostics(uri);
   }
 
   /**
@@ -283,6 +315,89 @@ export class LspServerCore {
       log('didClose', textDocument.uri);
     }
   }
+
+  /**
+   * `workspace/symbol`リクエストのハンドラ。
+   * ワークスペース全体からクエリに一致するシンボルを検索する。
+   * @param {{ query: string }} params - 検索クエリ。
+   * @returns {Promise<SymbolInformation[] | null>}
+   */
+  async 'workspace/symbol'(params) {
+    const query = params?.query;
+    if (typeof query !== 'string') {
+      return null;
+    }
+
+    await this.#bootVfs();
+
+    try {
+      // TypeScript言語サービスを使って、ナビゲーションアイテムを検索
+      const navigateToItems =
+        this.#env.languageService.getNavigateToItems(query);
+
+      // ts.NavigateToItem[] を lsp.SymbolInformation[] に変換
+      const symbols = (navigateToItems || []).map((item) => {
+        const sourceFile = this.#env.languageService
+          .getProgram()
+          .getSourceFile(item.fileName);
+
+        const start = item.textSpan.start;
+        const end = item.textSpan.start + item.textSpan.length;
+
+        const range = {
+          start: sourceFile
+            ? ts.getLineAndCharacterOfPosition(sourceFile, start)
+            : { line: 0, character: 0 },
+          end: sourceFile
+            ? ts.getLineAndCharacterOfPosition(sourceFile, end)
+            : { line: 0, character: 0 },
+        };
+
+        return {
+          name: item.name,
+          kind: this.#tsScriptElementKindToLspSymbolKind(item.kind),
+          location: { uri: this.#pathToUri(item.fileName), range },
+          containerName: item.containerName || undefined,
+        };
+      });
+      return symbols;
+    } catch (e) {
+      log('workspace/symbol failed', e);
+      return null;
+    }
+  }
+
+  // --- Workspace Features ---
+
+  /**
+   * `workspace/didChangeConfiguration` 通知のハンドラ。
+   * クライアント側の設定変更（例: フォーマットオプション、診断設定など）を受け取る。
+   * @param {object} params - { settings: any }
+   */
+  async 'workspace/didChangeConfiguration'(params) {
+    const settings = params?.settings;
+    log('workspace/didChangeConfiguration received', settings);
+
+    // クライアントから送られてきた設定を現在のコンパイラオプションにマージする
+    // ここでは 'typescript' というキーで設定が送られてくることを想定
+    const newCompilerOptions = {
+      ...this.#compilerOptions,
+      ...settings?.typescript,
+    };
+
+    // 新しい設定を適用
+    this.#compilerOptions = newCompilerOptions;
+    this.#env.setCompilerOptions(this.#compilerOptions);
+
+    log('Updated compilerOptions:', this.#compilerOptions);
+
+    // 設定が変更されたため、開いているすべてのファイルに対して再度診断を実行する
+    for (const uri of this.#openFiles.keys()) {
+      this.#scheduleDiagnostics(uri);
+    }
+  }
+
+  // --- Text Document Features ---
 
   /**
    * `textDocument/completion`リクエストのハンドラ。
@@ -365,38 +480,6 @@ export class LspServerCore {
     Information: 3,
     Hint: 4,
   };
-
-  /**
-   * `textDocument/diagnostics`リクエストのハンドラ。コードの診断情報（エラーや警告）を提供する。
-   * @param {object} params - LSPのdiagnosticsパラメータ。
-   * @returns {Promise<object>} LSPのFullDocumentDiagnosticReport。
-   */
-  async 'textDocument/diagnostics'(params) {
-    const uri = params?.textDocument?.uri; // LSP 3.17
-    if (!uri) {
-      return { kind: 'full', items: [] }; // LSP 3.17
-    }
-    await this.#bootVfs();
-
-    const doc = this.#openFiles.get(uri);
-    if (!doc) {
-      // ファイルが開かれていない場合は診断情報なし
-      return { kind: 'full', items: [] };
-    }
-
-    const path = this.#uriToPath(uri);
-    // 構文エラーと意味論エラーの両方を取得
-    const all = [
-      ...this.#env.languageService.getSyntacticDiagnostics(path),
-      ...this.#env.languageService.getSemanticDiagnostics(path),
-    ];
-
-    const items = all.map((d) =>
-      this.#tsDiagnosticToLspDiagnostic(d, doc.text)
-    );
-    // LSP 3.17仕様に準拠した形式で返す
-    return { kind: 'full', items };
-  }
 
   /**
    * TypeScript の QuickInfo.displayParts から
@@ -718,6 +801,14 @@ export class LspServerCore {
     return uri.replace(/^file:\/\/\/?/, '');
   }
 
+  /**
+   * VFSパスからファイルURIに変換する。
+   * @param {string} path - VFS用のパス。
+   * @returns {string} ファイルURI。
+   */
+  #pathToUri(path) {
+    return 'file:///' + path;
+  }
   /** VFSにファイルを作成または更新する */
   #updateFile(path, text) {
     if (this.#system.fileExists(path)) {
@@ -726,8 +817,7 @@ export class LspServerCore {
       this.#env.createFile(path, text);
     }
     // 自動診断スケジュール
-    const uri = 'file:///' + path;
-    this.#scheduleDiagnostics(uri);
+    this.#scheduleDiagnostics(this.#pathToUri(path));
   }
 
   /** TypeScriptのDiagnosticCategoryをLSPのDiagnosticSeverityに変換する */
@@ -743,6 +833,36 @@ export class LspServerCore {
         return LspServerCore.DiagnosticSeverity.Information;
       default:
         return LspServerCore.DiagnosticSeverity.Information;
+    }
+  }
+
+  /** TypeScriptのScriptElementKindをLSPのSymbolKindに変換する */
+  #tsScriptElementKindToLspSymbolKind(kind) {
+    switch (kind) {
+      case ts.ScriptElementKind.moduleElement:
+        return SymbolKind.Module;
+      case ts.ScriptElementKind.classElement:
+        return SymbolKind.Class;
+      case ts.ScriptElementKind.interfaceElement:
+        return SymbolKind.Interface;
+      case ts.ScriptElementKind.enumElement:
+        return SymbolKind.Enum;
+      case ts.ScriptElementKind.memberFunctionElement:
+        return SymbolKind.Method;
+      case ts.ScriptElementKind.memberVariableElement:
+        return SymbolKind.Field;
+      case ts.ScriptElementKind.functionElement:
+        return SymbolKind.Function;
+      case ts.ScriptElementKind.variableElement:
+        return SymbolKind.Variable;
+      case ts.ScriptElementKind.constElement:
+        return SymbolKind.Constant;
+      case ts.ScriptElementKind.localVariableElement:
+        return SymbolKind.Variable;
+      case ts.ScriptElementKind.localFunctionElement:
+        return SymbolKind.Function;
+      default:
+        return SymbolKind.Variable;
     }
   }
 }
