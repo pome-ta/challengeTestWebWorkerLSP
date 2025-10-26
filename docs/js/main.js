@@ -10,9 +10,9 @@ import { languageServerExtensions, LSPClient } from '@codemirror/lsp-client';
 
 import { basicSetup } from 'codemirror';
 
-import { createWorkerTransportFactory } from './worker-transport-factory.js';
+import { createWorkerTransportFactory } from './client/worker-transport-factory.js';
 
-const { transport } = await createWorkerTransportFactory('./js/worker.js', {
+const { transport } = await createWorkerTransportFactory('./js/server/worker.js', {
   debug: true,
 });
 // transport は LSPTransportAdapter -> LSPClient と互換

@@ -16,7 +16,7 @@
 import {
   createWorkerTransport,
   LSPTransportAdapter,
-} from './worker-transport.js';
+} from '../shared/worker-transport.js';
 
 /**
  * createWorkerTransportFactory
