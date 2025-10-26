@@ -1,3 +1,5 @@
+// --- lsp-server-core.js v0.9
+
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
 

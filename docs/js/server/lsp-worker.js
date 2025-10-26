@@ -1,3 +1,5 @@
+// --- lsp-worker.js v0.9
+
 import { LspServerCore } from './lsp-server-core.js';
 
 /**
