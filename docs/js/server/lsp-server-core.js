@@ -218,21 +218,16 @@ export class LspServerCore {
       );
       const system = vfs.createSystem(defaultMap);
 
-      // LSPサーバーがコードを解析する際の初期ルールを定義
-      this.#compilerOptions = {
-        target: ts.ScriptTarget.ES2022, // プライベート識別子(#)などの新しい構文をサポート
-
-        //moduleResolution: ts.ModuleResolutionKind.Bundler, // クライアントコード内のURLベースのimportを許可
-
-        moduleResolution: ts.ModuleResolutionKind.Bundler, // クライアントコード内のURLベースのimportを許可
+      // LSPサーバーがコードを解析する際のルールを定義
+      const compilerOptions = {
+        // 生成するJSのバージョンを指定。'ES2015'以上でないとプライベート識別子(#)などでエラーになる
+        target: ts.ScriptTarget.ES2022,
+        moduleResolution: ts.ModuleResolutionKind.Bundler, // URLベースのimportなど、モダンなモジュール解決を許可する
+        allowArbitraryExtensions: true, // .js や .ts 以外の拡張子を持つファイルをインポートできるようにする
         allowJs: true, // .js ファイルのコンパイルを許可する
-
         checkJs: true, // .js ファイルに対しても型チェックを行う (JSDocと連携)
-
         strict: true, // すべての厳格な型チェックオプションを有効にする (noImplicitAnyなどを含む)
-
         noUnusedLocals: true, // 未使用のローカル変数をエラーとして報告する
-
         noUnusedParameters: true, // 未使用の関数パラメータをエラーとして報告する
       };
 
@@ -241,7 +236,7 @@ export class LspServerCore {
         system,
         [],
         ts,
-        this.#compilerOptions
+        compilerOptions
       );
 
       this.#defaultMap = defaultMap;
@@ -820,7 +815,8 @@ export class LspServerCore {
       this.#env.createFile(path, text);
     }
     // 自動診断スケジュール
-    this.#scheduleDiagnostics(this.#pathToUri(path));
+    const uri = 'file:///' + path;
+    this.#scheduleDiagnostics(uri);
   }
 
   /** TypeScriptのDiagnosticCategoryをLSPのDiagnosticSeverityに変換する */
