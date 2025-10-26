@@ -62,7 +62,7 @@ const extensions = [
   customTheme,
   typescriptLanguage,
   autocompletion({ activateOnTyping: true }),
-  client.plugin('file:///main.ts'),
+  client.plugin('file:///main.js'),
   //oneDark,
 ];
 
