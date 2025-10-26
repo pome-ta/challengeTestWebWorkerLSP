@@ -31,8 +31,6 @@ function _send(obj) {
   }
 }
 
-
-
 const CompletionItemKind = {
   Text: 1,
   Method: 2,
@@ -177,8 +175,7 @@ export class LspServerCore {
       // CDNからTypeScriptの型定義ファイル(.d.ts)をダウンロードしてVFSを初期化
       const defaultMap = await vfs.createDefaultMapFromCDN(
         {
-          target: ts.ScriptTarget.ES2020,
-          //lib: ['es2022', 'dom',],
+          target: ts.ScriptTarget.ES2022,
           module: ts.ModuleKind.ESNext,
         },
         ts.version,
@@ -186,24 +183,27 @@ export class LspServerCore {
         ts
       );
       const system = vfs.createSystem(defaultMap);
-      // 仮想環境を作成
-      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, {
-        allowJs: true,
-      });
 
-      /*
-      env.compilerOptions = {
-        ...env.compilerOptions,
-        //target: ts.ScriptTarget.ES2022,
-        //module: ts.ModuleKind.ESNext,
-        allowJs: true,
-        checkJs: true,
-        strict: true,
-        noUnusedLocals: true,
-        noUnusedParameters: true,
-        noImplicitAny: true,
+      // LSPサーバーがコードを解析する際のルールを定義
+      const compilerOptions = {
+        // 生成するJSのバージョンを指定。'ES2015'以上でないとプライベート識別子(#)などでエラーになる
+        target: ts.ScriptTarget.ES2022,
+        moduleResolution: ts.ModuleResolutionKind.Bundler, // URLベースのimportなど、モダンなモジュール解決を許可する
+        allowArbitraryExtensions: true, // .js や .ts 以外の拡張子を持つファイルをインポートできるようにする
+        allowJs: true, // .js ファイルのコンパイルを許可する
+        checkJs: true, // .js ファイルに対しても型チェックを行う (JSDocと連携)
+        strict: true, // すべての厳格な型チェックオプションを有効にする (noImplicitAnyなどを含む)
+        noUnusedLocals: true, // 未使用のローカル変数をエラーとして報告する
+        noUnusedParameters: true, // 未使用の関数パラメータをエラーとして報告する
       };
-      */
+
+      // 仮想環境を作成し、定義したコンパイラオプションを渡す
+      const env = vfs.createVirtualTypeScriptEnvironment(
+        system,
+        [],
+        ts,
+        compilerOptions
+      );
 
       this.#defaultMap = defaultMap;
       this.#system = system;
@@ -727,7 +727,7 @@ export class LspServerCore {
     }
     // 自動診断スケジュール
     const uri = 'file:///' + path;
-    this.#scheduleDiagnostics(uri)
+    this.#scheduleDiagnostics(uri);
   }
 
   /** TypeScriptのDiagnosticCategoryをLSPのDiagnosticSeverityに変換する */
