@@ -143,6 +143,7 @@ export class LspServerCore {
    * VFSを起動し、サーバーの機能と情報をクライアントに返す。
    * @returns {Promise<object>} LSPのInitializeResult。
    */
+   
   async initialize() {
     await this.#bootVfs();
     return {
@@ -150,6 +151,8 @@ export class LspServerCore {
       serverInfo: { name: 'ts-vfs-worker', version: ts.version ?? 'unknown' },
     };
   }
+  
+
 
   /**
    * `initialized`通知のハンドラ。クライアントの初期化完了を受け取る。
@@ -245,7 +248,7 @@ export class LspServerCore {
       this.#system = system;
       this.#env = env;
       log('vfs booted (ts:', ts.version, ')');
-      self.postMessage({ method: '__ready' });
+      //self.postMessage({ method: '__ready' });
       return env;
     })();
     return this.#bootPromise;

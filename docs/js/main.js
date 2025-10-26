@@ -23,17 +23,23 @@ const { transport } = await createWorkerTransportFactory(
 // transport は LSPTransportAdapter -> LSPClient と互換
 const client = new LSPClient({
   extensions: languageServerExtensions(),
-  // サーバーに渡す初期設定。
-  // この設定は、クライアント接続後に `workspace/didChangeConfiguration` 通知としてサーバーに送信される。
-  workspaceConfiguration: {
-    typescript: {
-      // 例として、未使用変数の警告を無効にしてみる
-      // これにより、サーバーの noUnusedLocals, noUnusedParameters が上書きされる
-      // noUnusedLocals: false,
-      // noUnusedParameters: false,
+}).connect(transport);
+/*
+await client.request('initialize', {
+  processId: null,
+  rootUri: 'file:///main.js',
+  capabilities: {},
+  initializationOptions: {
+    compilerOptions: {
+      strict: true,
+      noUnusedLocals: true,
+      noImplicitAny: true,
     },
   },
-}).connect(transport);
+});
+*/
+// 通常の LSP 初期化完了通知
+//client.notify('initialized', {});
 
 // Editor 設定
 //const initialCode = `// demo\nconst x = 1;\nconsole.log();\nx = 1;\nhoge = 1;\n`;
@@ -127,3 +133,20 @@ document.addEventListener('visibilitychange', () => {
     // cleanupLsp(); // バックグラウンド移行時に毎回終了させたい場合はこちらも有効にする
   }
 });
+
+
+/*
+const client = new LSPClient({
+  extensions: languageServerExtensions(),
+  // サーバーに渡す初期設定。
+  // この設定は、クライアント接続後に `workspace/didChangeConfiguration` 通知としてサーバーに送信される。
+  workspaceConfiguration: {
+    typescript: {
+      // 例として、未使用変数の警告を無効にしてみる
+      // これにより、サーバーの noUnusedLocals, noUnusedParameters が上書きされる
+      // noUnusedLocals: false,
+      // noUnusedParameters: false,
+    },
+  },
+}).connect(transport);
+*/
