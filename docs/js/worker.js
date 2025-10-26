@@ -142,10 +142,10 @@ class LspServerCore {
     textDocumentSync: 1, // 1: Full. ドキュメントの同期は常に全内容を送信する。
     completionProvider: {
       resolveProvider: true, // `completionItem/resolve` をサポート
-      triggerCharacters: ['.', '"', "'", '`',], // triggerCharacter を見て自動送信
+      triggerCharacters: ['.', '"', "'", '`'], // triggerCharacter を見て自動送信
     },
     hoverProvider: true, // `textDocument/hover` をサポート
-    signatureHelpProvider: { triggerCharacters: ['(', ',',], },
+    signatureHelpProvider: { triggerCharacters: ['(', ','] },
   };
 
   /** @type {Map<string, string> | null} - TypeScriptのVFS用のデフォルトファイルマップ */
