@@ -232,7 +232,7 @@ export class LspServerCore {
 
     this.#updateFile(path, textDocument.text);
     log('didOpen', textDocument.uri);
-
+    // todo: 重複？
     this.#scheduleDiagnostics(textDocument.uri);
   }
 
@@ -260,6 +260,7 @@ export class LspServerCore {
     this.#openFiles.set(uri, { text });
 
     this.#updateFile(path, text);
+    // todo: 重複?
     this.#scheduleDiagnostics(uri);
   }
 
@@ -721,6 +722,9 @@ export class LspServerCore {
     } else {
       this.#env.createFile(path, text);
     }
+    // 自動診断スケジュール
+    const uri = 'file:///' + path;
+    this.#scheduleDiagnostics(uri)
   }
 
   /** TypeScriptのDiagnosticCategoryをLSPのDiagnosticSeverityに変換する */
