@@ -30,6 +30,9 @@ function _send(obj) {
     );
   }
 }
+
+
+
 const CompletionItemKind = {
   Text: 1,
   Method: 2,
@@ -233,7 +236,7 @@ export class LspServerCore {
     this.#updateFile(path, textDocument.text);
     log('didOpen', textDocument.uri);
     // todo: 重複？
-    this.#scheduleDiagnostics(textDocument.uri);
+    //this.#scheduleDiagnostics(textDocument.uri);
   }
 
   /**
@@ -261,7 +264,7 @@ export class LspServerCore {
 
     this.#updateFile(path, text);
     // todo: 重複?
-    this.#scheduleDiagnostics(uri);
+    //this.#scheduleDiagnostics(uri);
   }
 
   /**
