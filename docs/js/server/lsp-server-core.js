@@ -21,50 +21,13 @@ function _send(obj) {
   try {
     self.postMessage(obj);
   } catch (e) {
-    console.error('[worker | lsp-server-core] _send failed to postMessage', e, obj);
+    console.error(
+      '[worker | lsp-server-core] _send failed to postMessage',
+      e,
+      obj
+    );
   }
 }
-
-/**
- * テキストとLSPのPositionオブジェクトからオフセットを計算する。
- * @param {string} text
- * @param {{line: number, character: number}} pos
- * @returns {number}
- */
-function posToOffset(text, pos) {
-  const lines = text.split('\n');
-  const line = Math.max(0, Math.min(pos?.line ?? 0, lines.length - 1));
-  const off = lines
-    .slice(0, line)
-    .reduce((acc, currentLine) => acc + currentLine.length + 1, 0);
-  const character = Math.max(
-    0,
-    Math.min(pos?.character ?? 0, lines[line]?.length ?? 0)
-  );
-  return off + character;
-}
-
-/**
- * テキストとオフセットからLSPのPositionオブジェクトを計算する。
- * @param {string} text
- * @param {number} offset
- * @returns {{line: number, character: number}}
- */
-function offsetToPos(text, offset) {
-  const safe = Math.max(0, Math.min(offset, text.length));
-  const lines = text.slice(0, safe).split('\n');
-  return { line: lines.length - 1, character: lines[lines.length - 1].length };
-}
-
-/**
- * TypeScriptのDisplayParts配列を単一の文字列に変換する。
- * @param {ts.SymbolDisplayPart[]} parts
- * @returns {string}
- */
-function displayPartsToString(parts) {
-  return ts.displayPartsToString(parts);
-}
-
 const CompletionItemKind = {
   Text: 1,
   Method: 2,
@@ -299,6 +262,23 @@ export class LspServerCore {
   }
 
   /**
+   * `textDocument/didClose`通知のハンドラ。
+   * @param {object} params - LSPのdidCloseパラメータ。
+   */
+  async 'textDocument/didClose'(params) {
+    const { textDocument } = params ?? {};
+    if (!textDocument?.uri) {
+      log('didClose: invalid params', params);
+      return;
+    }
+    // ファイルを閉じたので、キャッシュから削除
+    if (this.#openFiles.has(textDocument.uri)) {
+      this.#openFiles.delete(textDocument.uri);
+      log('didClose', textDocument.uri);
+    }
+  }
+
+  /**
    * `textDocument/completion`リクエストのハンドラ。
    * @param {object} params - LSPのcompletionパラメータ。
    * @returns {Promise<object>} LSPのCompletionList。
@@ -312,7 +292,17 @@ export class LspServerCore {
     await this.#bootVfs();
     const path = this.#uriToPath(uri);
     const doc = this.#openFiles.get(uri);
-    const offset = posToOffset(doc?.text ?? '', position);
+    const sourceFile = this.#env.languageService
+      .getProgram()
+      .getSourceFile(path);
+    if (!sourceFile) {
+      return { isIncomplete: false, items: [] };
+    }
+    const offset = ts.getPositionOfLineAndCharacter(
+      sourceFile,
+      position.line,
+      position.character
+    );
 
     try {
       const completions = this.#env.languageService.getCompletionsAtPosition(
@@ -353,8 +343,8 @@ export class LspServerCore {
       undefined
     );
     return Object.assign({}, item, {
-      detail: displayPartsToString(d?.displayParts),
-      documentation: displayPartsToString(d?.documentation),
+      detail: ts.displayPartsToString(d?.displayParts),
+      documentation: ts.displayPartsToString(d?.documentation),
       insertText: d?.insertText ?? item.label,
       kind: mapTsKindToLsp(d?.kind ?? item.kind),
     });
@@ -435,8 +425,19 @@ export class LspServerCore {
       await this.#bootVfs();
       const path = this.#uriToPath(uri);
       const doc = this.#openFiles.get(uri);
-      const text = doc?.text ?? '';
-      const offset = posToOffset(text, position);
+      const sourceFile = this.#env.languageService
+        .getProgram()
+        .getSourceFile(path);
+      if (!sourceFile) {
+        return null;
+      }
+      const offset = ts.getPositionOfLineAndCharacter(
+        sourceFile,
+        position.line,
+        position.character
+      );
+
+      const text = sourceFile.text;
 
       // TypeScript quick info
       const info = this.#env.languageService.getQuickInfoAtPosition(
@@ -446,10 +447,9 @@ export class LspServerCore {
       if (!info) return null;
 
       // build markdown contents: code block of declaration + documentation
-      const signature = displayPartsToString(info.displayParts);
+      const signature = ts.displayPartsToString(info.displayParts);
       //const signature = this.#extractTypeSummary(info.displayParts);
-      //const signature = '';
-      const documentation = displayPartsToString(info.documentation);
+      const documentation = ts.displayPartsToString(info.documentation);
 
       let value = '';
       if (signature && signature.trim().length > 0) {
@@ -464,9 +464,12 @@ export class LspServerCore {
       // compute range from info.textSpan if available
       let range;
       if (info.textSpan && typeof info.textSpan.start === 'number') {
-        const startPos = offsetToPos(text, info.textSpan.start);
-        const endPos = offsetToPos(
-          text,
+        const startPos = ts.getLineAndCharacterOfPosition(
+          sourceFile,
+          info.textSpan.start
+        );
+        const endPos = ts.getLineAndCharacterOfPosition(
+          sourceFile,
           info.textSpan.start + (info.textSpan.length ?? 0)
         );
         range = { start: startPos, end: endPos };
@@ -500,8 +503,17 @@ export class LspServerCore {
       await this.#bootVfs();
       const path = this.#uriToPath(uri);
       const doc = this.#openFiles.get(uri);
-      const text = doc?.text ?? '';
-      const offset = posToOffset(text, position);
+      const sourceFile = this.#env.languageService
+        .getProgram()
+        .getSourceFile(path);
+      if (!sourceFile) {
+        return null;
+      }
+      const offset = ts.getPositionOfLineAndCharacter(
+        sourceFile,
+        position.line,
+        position.character
+      );
 
       // TypeScript の signature help を取得
       // getSignatureHelpItems(fileName, position, options)
@@ -516,25 +528,25 @@ export class LspServerCore {
       const signatures = (helpItems.items || []).map((item) => {
         // シグネチャラベル(displayParts を結合)
         const label =
-          displayPartsToString(item.prefixDisplayParts) +
+          ts.displayPartsToString(item.prefixDisplayParts) +
           (item.parameters || [])
             .map((p, i) => {
-              const paramText = displayPartsToString(
+              const paramText = ts.displayPartsToString(
                 item.parameters[i]?.displayParts ?? []
               );
               return paramText;
             })
-            .join(displayPartsToString(item.separatorDisplayParts) || ',') +
-          displayPartsToString(item.suffixDisplayParts);
+            .join(ts.displayPartsToString(item.separatorDisplayParts) || ',') +
+          ts.displayPartsToString(item.suffixDisplayParts);
 
         // ドキュメント(documentationParts がある場合)
-        const documentation = displayPartsToString(item.documentation ?? []);
+        const documentation = ts.displayPartsToString(item.documentation ?? []);
 
         // パラメータ配列を LSP 形式に
         const parameters = (item.parameters || []).map((p) => {
           return {
-            label: displayPartsToString(p.displayParts) || p.name || '',
-            documentation: displayPartsToString(p.documentation ?? []),
+            label: ts.displayPartsToString(p.displayParts) || p.name || '',
+            documentation: ts.displayPartsToString(p.documentation ?? []),
           };
         });
 
@@ -623,11 +635,18 @@ export class LspServerCore {
 
     // Convert to LSP Diagnostic[]
     const diagnostics = all.map((d) => {
+      const sourceFile = this.#env.languageService
+        .getProgram()
+        .getSourceFile(path);
       const start = d.start ?? 0;
       const end = start + (d.length ?? 0);
       const range = {
-        start: offsetToPos(text, start),
-        end: offsetToPos(text, end),
+        start: sourceFile
+          ? ts.getLineAndCharacterOfPosition(sourceFile, start)
+          : { line: 0, character: 0 },
+        end: sourceFile
+          ? ts.getLineAndCharacterOfPosition(sourceFile, end)
+          : { line: 0, character: 0 },
       };
       return {
         range,
@@ -661,11 +680,18 @@ export class LspServerCore {
    * @returns {object} LSPのDiagnosticオブジェクト。
    */
   #tsDiagnosticToLspDiagnostic(tsDiag, fileContent) {
+    const sourceFile = this.#env.languageService
+      .getProgram()
+      .getSourceFile(this.#uriToPath(tsDiag.file.name));
     const start = tsDiag.start ?? 0;
     const end = start + (tsDiag.length ?? 0);
     const range = {
-      start: offsetToPos(fileContent, start),
-      end: offsetToPos(fileContent, end),
+      start: sourceFile
+        ? ts.getLineAndCharacterOfPosition(sourceFile, start)
+        : { line: 0, character: 0 },
+      end: sourceFile
+        ? ts.getLineAndCharacterOfPosition(sourceFile, end)
+        : { line: 0, character: 0 },
     };
 
     return {

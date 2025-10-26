@@ -12,9 +12,12 @@ import { basicSetup } from 'codemirror';
 
 import { createWorkerTransportFactory } from './client/worker-transport-factory.js';
 
-const { transport } = await createWorkerTransportFactory('./js/server/worker.js', {
-  debug: true,
-});
+const { transport } = await createWorkerTransportFactory(
+  './js/server/worker.js',
+  {
+    debug: true,
+  }
+);
 // transport は LSPTransportAdapter -> LSPClient と互換
 const client = new LSPClient({
   extensions: languageServerExtensions(),
@@ -82,22 +85,33 @@ const view = new EditorView({
   // },
 });
 
-// --- LSP ライフサイクル cleanup
-window.addEventListener('beforeunload', () => {
-  // beforeunloadでは非同期完了は保証されないため、
-  // Request系はawaitせず同期的に発火する。
+/**
+ * LSPサーバーのクリーンアップ処理。
+ * ページが非表示になる、または閉じられる際に呼び出される。
+ */
+const cleanupLsp = () => {
+  // 非同期完了は保証されないため、Request系はawaitせず同期的に発火する。
   try {
     // LSP準拠: shutdown → exit の順
     transport.send({
       jsonrpc: '2.0',
       id: 9999,
       method: 'shutdown',
-      params: {},
     });
     transport.send({ jsonrpc: '2.0', method: 'exit' });
   } catch (e) {
     console.warn('[main] LSP shutdown/exit failed', e);
   } finally {
     transport.close?.();
+  }
+};
+
+// --- LSP ライフサイクル cleanup ---
+// モバイルでは beforeunload の信頼性が低いため、複数のイベントをリッスンする
+window.addEventListener('beforeunload', cleanupLsp);
+window.addEventListener('pagehide', cleanupLsp);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    // cleanupLsp(); // バックグラウンド移行時に毎回終了させたい場合はこちらも有効にする
   }
 });
