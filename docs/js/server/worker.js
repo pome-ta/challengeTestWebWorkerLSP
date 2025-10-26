@@ -4,7 +4,7 @@
  * LSPWorkerをインスタンス化して、メッセージの待受を開始する。
  */
 
-import { LSPWorker } from './lsp-worker.js';
+import {LSPWorker} from './lsp-worker.js';
 
 // Workerのインスタンスを作成し、メッセージの待受を開始する
 new LSPWorker();

@@ -60,6 +60,14 @@ class WorkerTransport {
   }
 
   /**
+   * 内部で保持しているWorkerインスタンスを返す。
+   * @returns {Worker}
+   */
+  get worker() {
+    return this.#worker;
+  }
+
+  /**
    * Workerにメッセージを送信する。
    * @param {string | object} message - 送信するメッセージ。
    */
@@ -96,14 +104,14 @@ class WorkerTransport {
    * @param {'json' | 'raw'} [options.format='json'] - ハンドラに渡すメッセージの形式。'json'は文字列、'raw'はオブジェクト。
    */
   subscribe(handler, options = {}) {
-    const { format = 'json' } = options; // デフォルトは 'json'
+    const {format = 'json'} = options; // デフォルトは 'json'
     this.#handlers.set(handler, format);
 
     this.#debug &&
-      console.debug('[worker-transport] handler subscribed:', {
-        handler,
-        format,
-      });
+    console.debug('[worker-transport] handler subscribed:', {
+      handler,
+      format,
+    });
   }
 
   /**
@@ -114,7 +122,7 @@ class WorkerTransport {
     if (this.#handlers.has(handler)) {
       this.#handlers.delete(handler);
       this.#debug &&
-        console.debug('[worker-transport] handler unsubscribed:', handler);
+      console.debug('[worker-transport] handler unsubscribed:', handler);
     }
   }
 
@@ -125,14 +133,6 @@ class WorkerTransport {
   close() {
     this.#worker.terminate();
     this.#debug && console.debug('[worker-transport] worker terminated');
-  }
-
-  /**
-   * 内部で保持しているWorkerインスタンスを返す。
-   * @returns {Worker}
-   */
-  get worker() {
-    return this.#worker;
   }
 }
 
@@ -145,24 +145,30 @@ class WorkerTransport {
  */
 export class LSPTransportAdapter {
   #transport;
+
   /**
    * @param {WorkerTransport} transport - ラップするWorkerTransportインスタンス。
    */
   constructor(transport) {
     this.#transport = transport;
   }
+
+  get worker() {
+    return this.#transport.worker;
+  }
+
   send = (message) => this.#transport.send(message);
+
   /**
    * LSPClient用に、常に 'json' 形式でハンドラを登録する。
    * @param {Function} handler
    */
   subscribe = (handler) =>
-    this.#transport.subscribe(handler, { format: 'json' });
+    this.#transport.subscribe(handler, {format: 'json'});
+
   unsubscribe = (handler) => this.#transport.unsubscribe(handler);
+
   close = () => this.#transport.close();
-  get worker() {
-    return this.#transport.worker;
-  }
 }
 
 /**
@@ -173,6 +179,6 @@ export class LSPTransportAdapter {
  * @returns {Promise<WorkerTransport>} WorkerTransportのインスタンスを解決するPromise。
  */
 export async function createWorkerTransport(workerUrl, debug = false) {
-  const worker = new Worker(workerUrl, { type: 'module' });
+  const worker = new Worker(workerUrl, {type: 'module'});
   return new WorkerTransport(worker, debug);
 }

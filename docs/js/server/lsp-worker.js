@@ -1,6 +1,6 @@
 // --- lsp-worker.js v0.9
 
-import { LspServerCore } from './lsp-server-core.js';
+import {LspServerCore} from './lsp-server-core.js';
 
 /**
  * メインスレッドにメッセージを送信する。
@@ -71,7 +71,7 @@ export class LSPWorker {
       return;
     }
 
-    const { id, method, params, jsonrpc } = msg ?? {};
+    const {id, method, params, jsonrpc} = msg ?? {};
 
     // 2. リクエスト検証: JSON-RPC 2.0仕様に準拠しているか、methodが文字列か
     if (jsonrpc !== '2.0' || typeof method !== 'string') {
@@ -105,7 +105,7 @@ export class LSPWorker {
       const result = await handler(params, msg); // ハンドラを実行
       // idがあればリクエストなので、結果をレスポンスとして返す
       if (id !== undefined) {
-        _send({ jsonrpc: '2.0', id, result });
+        _send({jsonrpc: '2.0', id, result});
       }
     } catch (e) {
       // ハンドラ実行中にエラーが発生した場合
@@ -115,7 +115,7 @@ export class LSPWorker {
           id,
           RpcErrorCode.InternalError,
           e?.message ?? String(e),
-          { stack: e?.stack }
+          {stack: e?.stack}
         );
       }
     }
@@ -129,8 +129,8 @@ export class LSPWorker {
    * @param {any} [data] - エラーに関する追加情報。
    */
   #sendErrorResponse(id, code, message, data) {
-    const error = { code, message };
+    const error = {code, message};
     if (data) error.data = data;
-    _send({ jsonrpc: '2.0', id, error });
+    _send({jsonrpc: '2.0', id, error});
   }
 }

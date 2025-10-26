@@ -1,18 +1,16 @@
 // --- main.js v0.9
 
-import { EditorState } from '@codemirror/state';
-import { EditorView } from '@codemirror/view';
-import { autocompletion } from '@codemirror/autocomplete';
-import { typescriptLanguage } from '@codemirror/lang-javascript';
+import {EditorState} from '@codemirror/state';
+import {EditorView} from '@codemirror/view';
+import {autocompletion} from '@codemirror/autocomplete';
+import {typescriptLanguage} from '@codemirror/lang-javascript';
+import {languageServerExtensions, LSPClient} from '@codemirror/lsp-client';
 
-import { oneDark } from '@codemirror/theme-one-dark';
-import { languageServerExtensions, LSPClient } from '@codemirror/lsp-client';
+import {basicSetup} from 'codemirror';
 
-import { basicSetup } from 'codemirror';
+import {createWorkerTransportFactory} from './client/worker-transport-factory.js';
 
-import { createWorkerTransportFactory } from './client/worker-transport-factory.js';
-
-const { transport } = await createWorkerTransportFactory(
+const {transport} = await createWorkerTransportFactory(
   './js/server/worker.js',
   {
     waitForReady: true, // サーバーの準備完了通知(__ready)を待つ
@@ -24,25 +22,8 @@ const { transport } = await createWorkerTransportFactory(
 const client = new LSPClient({
   extensions: languageServerExtensions(),
 }).connect(transport);
-/*
-await client.request('initialize', {
-  processId: null,
-  rootUri: 'file:///main.js',
-  capabilities: {},
-  initializationOptions: {
-    compilerOptions: {
-      strict: true,
-      noUnusedLocals: true,
-      noImplicitAny: true,
-    },
-  },
-});
-*/
-// 通常の LSP 初期化完了通知
-//client.notify('initialized', {});
 
 // Editor 設定
-//const initialCode = `// demo\nconst x = 1;\nconsole.log();\nx = 1;\nhoge = 1;\n`;
 
 const initialCode = `// @ts-check
 
@@ -75,14 +56,14 @@ const customTheme = EditorView.theme(
       fontSize: '0.72rem',
     },
   },
-  { dark: false }
+  {dark: false}
 );
 
 const extensions = [
   basicSetup,
   customTheme,
   typescriptLanguage,
-  autocompletion({ activateOnTyping: true }),
+  autocompletion({activateOnTyping: true}),
   client.plugin('file:///main.js'),
   //oneDark,
 ];
@@ -116,7 +97,7 @@ const cleanupLsp = () => {
       id: 9999,
       method: 'shutdown',
     });
-    transport.send({ jsonrpc: '2.0', method: 'exit' });
+    transport.send({jsonrpc: '2.0', method: 'exit'});
   } catch (e) {
     console.warn('[main] LSP shutdown/exit failed', e);
   } finally {
@@ -133,20 +114,3 @@ document.addEventListener('visibilitychange', () => {
     // cleanupLsp(); // バックグラウンド移行時に毎回終了させたい場合はこちらも有効にする
   }
 });
-
-
-/*
-const client = new LSPClient({
-  extensions: languageServerExtensions(),
-  // サーバーに渡す初期設定。
-  // この設定は、クライアント接続後に `workspace/didChangeConfiguration` 通知としてサーバーに送信される。
-  workspaceConfiguration: {
-    typescript: {
-      // 例として、未使用変数の警告を無効にしてみる
-      // これにより、サーバーの noUnusedLocals, noUnusedParameters が上書きされる
-      // noUnusedLocals: false,
-      // noUnusedParameters: false,
-    },
-  },
-}).connect(transport);
-*/
