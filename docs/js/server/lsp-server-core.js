@@ -122,6 +122,7 @@ export class LspServerCore {
 
   async initialize() {
     await this.#bootVfs();
+    
     return {
       capabilities: LspServerCore.serverCapabilities,
       serverInfo: {name: 'ts-vfs-worker', version: ts.version ?? 'unknown'},
@@ -190,6 +191,21 @@ export class LspServerCore {
         false,
         ts
       );
+      
+      
+      
+      /*
+      const url = `https://typescript.azureedge.net/cdn/${version}/typescript/lib/lib.dom.d.ts`
+      const text = await fetch(url).then(r => r.text())
+      vfs.set('/lib.dom.d.ts', text)
+      */
+      /*
+      const map = await createDefaultMapFromCDN(ts, tsVersion, ts.ScriptTarget.ES2022, false, ts.ModuleKind.ESNext)
+      const p5Dts = await fetch('https://esm.sh/@types/p5/index.d.ts').then(r => r.text())
+      map.set('/node_modules/@types/p5/index.d.ts', p5Dts)
+      */
+      
+      
       const system = vfs.createSystem(defaultMap);
 
       // LSPサーバーがコードを解析する際のルールを定義
@@ -212,6 +228,8 @@ export class LspServerCore {
         ts,
         compilerOptions
       );
+      
+      
 
       this.#defaultMap = defaultMap;
       this.#system = system;

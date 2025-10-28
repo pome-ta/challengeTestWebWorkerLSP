@@ -84,6 +84,13 @@ const view = new EditorView({
   // },
 });
 
+const atTypesP5url = 'https://esm.sh/@types/p5/index.d.ts';
+//const text = await fetch(atTypesP5url).then(r => r.text());
+
+//console.log(text)
+
+//const p5Dts = await fetch('https://esm.sh/@types/p5/index.d.ts')
+
 /**
  * LSPサーバーのクリーンアップ処理。
  * ページが非表示になる、または閉じられる際に呼び出される。
