@@ -122,7 +122,6 @@ export class LspServerCore {
 
   async initialize() {
     await this.#bootVfs();
-    
     return {
       capabilities: LspServerCore.serverCapabilities,
       serverInfo: {name: 'ts-vfs-worker', version: ts.version ?? 'unknown'},
@@ -182,6 +181,7 @@ export class LspServerCore {
     // 右辺の即時実行非同期関数を評価・代入する
     this.#bootPromise ??= (async () => {
       // CDNからTypeScriptの型定義ファイル(.d.ts)をダウンロードしてVFSを初期化
+      log('bootPromise')
       const defaultMap = await vfs.createDefaultMapFromCDN(
         {
           target: ts.ScriptTarget.ES2022,
@@ -235,7 +235,7 @@ export class LspServerCore {
       this.#system = system;
       this.#env = env;
       log('vfs booted (ts:', ts.version, ')');
-      self.postMessage({method: '__ready'});
+      //self.postMessage({method: '__ready'});
       return env;
     })();
     return this.#bootPromise;

@@ -55,7 +55,9 @@ class WorkerTransport {
 
     // Worker内部で発生した未キャッチのエラーのハンドリング
     this.#worker.onerror = (err) => {
-      console.error('[worker-transport] worker error:', err);
+      //console.error('[worker-transport] worker error:', err);
+      console.error('[worker-transport] worker error:', err,err.message, err.filename, err.lineno, err.colno, err.error);
+
     };
   }
 
