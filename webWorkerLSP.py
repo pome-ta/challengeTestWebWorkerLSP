@@ -1,4 +1,5 @@
 import ctypes
+import sys
 
 from pathlib import Path
 from typing import Union
@@ -27,6 +28,8 @@ from rbedge.globalVariables import (
 from rbedge.makeZero import CGRectZero
 from rbedge.functions import NSStringFromClass
 from rbedge import pdbr
+
+TEST = True
 
 UIViewController = ObjCClass('UIViewController')
 NSLayoutConstraint = ObjCClass('NSLayoutConstraint')
@@ -492,10 +495,18 @@ class WebViewController(UIViewController):
 if __name__ == '__main__':
   from rbedge.app import App
   from rbedge.enumerations import UIModalPresentationStyle
+  
+  test_index = './docs/test_index.html'
+  production_index = './docs/index.html'
+  
+  target_index = test_index if TEST or (len(sys.argv) >= 2) else production_index
+  
+  
+  
 
   index_path = Path('./docs/index.html')
-  #save_path = Path('./docs/js/editor/index.js')
-  save_path = Path('./docs/js/sketchBooks/devSketch.js')
+
+  save_path = None
 
   main_vc = WebViewController.alloc().initWithIndexPath_(index_path)
   _title = NSStringFromClass(WebViewController)
