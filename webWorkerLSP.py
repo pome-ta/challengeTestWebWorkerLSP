@@ -29,7 +29,7 @@ from rbedge.makeZero import CGRectZero
 from rbedge.functions import NSStringFromClass
 from rbedge import pdbr
 
-TEST = True
+TEST = False
 
 UIViewController = ObjCClass('UIViewController')
 NSLayoutConstraint = ObjCClass('NSLayoutConstraint')
@@ -496,13 +496,10 @@ if __name__ == '__main__':
   from rbedge.app import App
   from rbedge.enumerations import UIModalPresentationStyle
   
-  test_index = './docs/test_index.html'
+  test_index = './docs/test-runner.html'
   production_index = './docs/index.html'
   
   target_index = test_index if TEST or (len(sys.argv) >= 2) else production_index
-  
-  
-  
 
   index_path = Path('./docs/index.html')
 
