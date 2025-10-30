@@ -496,13 +496,13 @@ if __name__ == '__main__':
   from rbedge.app import App
   from rbedge.enumerations import UIModalPresentationStyle
   
-  test_index = './docs/test-runner.html'
+  
   production_index = './docs/index.html'
+  test_index = './docs/test-runner.html'
   
   target_index = test_index if TEST or (len(sys.argv) >= 2) else production_index
 
-  index_path = Path('./docs/index.html')
-
+  index_path = Path(target_index)
   save_path = None
 
   main_vc = WebViewController.alloc().initWithIndexPath_(index_path)
