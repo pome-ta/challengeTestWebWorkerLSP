@@ -7,16 +7,23 @@
       content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no"
   />
   
-  <script type="importmap" src="./shared/importmap.json"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "eruda": "https://esm.sh/eruda",
+        "codemirror": "https://esm.sh/codemirror",
+        "@codemirror/": "https://esm.sh/@codemirror/"
+      }
+    }
+  </script>
   
   
   <!-- eruda -->
   <script type="module">
     import eruda from 'eruda';
     
-    //window.eruda = eruda;
-    //window.eruda.init();
-    eruda.init();
+    window.eruda = eruda;
+    window.eruda.init();
   </script>
 
 
