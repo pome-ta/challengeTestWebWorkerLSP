@@ -1,0 +1,48 @@
+// test/worker-ping.test.js
+// v0.0.0.2
+
+import { expect } from 'chai';
+
+console.log('🧩 worker-ping.test.js loaded');
+
+const results = document.getElementById('results');
+
+// --- テスト開始 ---
+(async () => {
+  try {
+    const worker = new Worker('./js/worker.js', { type: 'module' });
+
+    // Worker の初期化完了を待機
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('Worker not ready')), 2000);
+      worker.onmessage = (e) => {
+        if (e.data === 'ready') {
+          clearTimeout(timer);
+          resolve();
+        }
+      };
+    });
+
+    // --- ping テスト ---
+    const response = await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('No pong response')), 2000);
+
+      worker.onmessage = (e) => {
+        clearTimeout(timer);
+        resolve(e.data);
+      };
+
+      worker.postMessage('ping');
+    });
+
+    // Worker からの応答を確認(まだ失敗する想定)
+    expect(response).to.equal('pong');
+    results.textContent = '✅ Worker ping test passed';
+    console.log('✅ Worker ping test passed');
+
+  } catch (err) {
+    results.textContent = '❌ Worker ping test failed: ' + err.message;
+    console.error('❌ Worker ping test failed:', err);
+  }
+})();
+
