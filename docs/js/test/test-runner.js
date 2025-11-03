@@ -3,3 +3,6 @@
 
 import './worker-init.test.js';
 import './worker-ping.test.js';
+
+console.log('🚀 test-runner.js loaded');
+
