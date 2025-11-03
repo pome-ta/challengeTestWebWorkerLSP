@@ -15,8 +15,8 @@ const results = document.getElementById('results');
     // Worker の初期化完了を待機
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Worker not ready')), 2000);
-      worker.onmessage = (e) => {
-        if (e.data === 'ready') {
+      worker.onmessage = (event) => {
+        if (event.data === 'ready') {
           clearTimeout(timer);
           resolve();
         }
@@ -27,9 +27,9 @@ const results = document.getElementById('results');
     const response = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('No pong response')), 2000);
 
-      worker.onmessage = (e) => {
+      worker.onmessage = (event) => {
         clearTimeout(timer);
-        resolve(e.data);
+        resolve(event.data);
       };
 
       worker.postMessage('ping');
@@ -40,9 +40,9 @@ const results = document.getElementById('results');
     results.textContent = '✅ Worker ping test passed';
     console.log('✅ Worker ping test passed');
 
-  } catch (err) {
-    results.textContent = '❌ Worker ping test failed: ' + err.message;
-    console.error('❌ Worker ping test failed:', err);
+  } catch (error) {
+    results.textContent = `❌ Worker ping test failed: ${error.message}`;
+    console.error(`❌ Worker ping test failed: ${error}`);
   }
 })();
 
