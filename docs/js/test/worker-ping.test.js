@@ -6,6 +6,11 @@ import { expect } from 'chai';
 console.log('🧩 worker-ping.test.js loaded');
 
 const results = document.getElementById('results');
+const orederedList = document.getElementById('testOrdered');
+const liItem = document.createElement('li');
+
+let textContent;
+
 
 // --- テスト開始 ---
 (async () => {
@@ -37,12 +42,14 @@ const results = document.getElementById('results');
 
     // Worker からの応答を確認(まだ失敗する想定)
     expect(response).to.equal('pong');
-    results.textContent = '✅ Worker ping test passed';
+    textContent = '✅ Worker ping test passed';
     console.log('✅ Worker ping test passed');
 
   } catch (error) {
-    results.textContent = `❌ Worker ping test failed: ${error.message}`;
+    textContent = `❌ Worker ping test failed: ${error.message}`;
     console.error(`❌ Worker ping test failed: ${error}`);
   }
+  liItem.textContent = textContent;
+  orederedList.appendChild(liItem);
 })();
 

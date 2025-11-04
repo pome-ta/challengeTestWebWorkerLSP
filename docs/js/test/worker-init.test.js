@@ -6,6 +6,10 @@ import { expect } from 'chai';
 console.log('🧩 worker-init.test.js loaded');
 
 const results = document.getElementById('results');
+const orederedList = document.getElementById('testOrdered');
+const liItem = document.createElement('li');
+
+let textContent;
 
 // --- テスト開始 ---
 (async () => {
@@ -15,19 +19,22 @@ const results = document.getElementById('results');
     const message = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Worker timeout')), 2000);
 
-      worker.onmessage = (e) => {
+      worker.onmessage = (event) => {
         clearTimeout(timer);
-        resolve(e.data);
+        resolve(event.data);
       };
     });
 
     expect(message).to.equal('ready');
-    results.textContent = '✅ Worker initialization test passed';
+    textContent = '✅ Worker initialization test passed';
     console.log('✅ Worker initialization test passed');
 
-  } catch (err) {
-    results.textContent = '❌ Worker initialization test failed: ' + err.message;
-    console.error('❌ Worker initialization test failed:', err);
+  } catch (error) {
+    textContent = `❌ Worker initialization test failed: ${error.message}`;
+    console.error(`❌ Worker initialization test failed: ${message}`);
   }
+  
+  liItem.textContent = textContent;
+  orederedList.appendChild(liItem);
 })();
 
