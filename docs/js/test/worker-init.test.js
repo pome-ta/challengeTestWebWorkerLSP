@@ -12,7 +12,6 @@ const liItem = document.createElement('li');
 let textContent;
 
 // --- テスト開始 ---
-
 (async () => {
   try {
     const worker = createTestWorker('./js/worker.js');

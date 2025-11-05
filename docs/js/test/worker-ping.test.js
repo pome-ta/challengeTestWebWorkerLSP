@@ -2,10 +2,11 @@
 // v0.0.0.2
 
 import {expect} from 'chai';
+import {createTestWorker} from './test-utils.js';
 
 console.log('🧩 worker-ping.test.js loaded');
 
-const orederedList = document.getElementById('testOrdered');
+const orderedList = document.getElementById('testOrdered');
 const liItem = document.createElement('li');
 
 let textContent;
@@ -53,5 +54,5 @@ let textContent;
     console.error(`❌ Worker ping test failed: ${error}`);
   }
   liItem.textContent = textContent;
-  orederedList.appendChild(liItem);
+  orderedList.appendChild(liItem);
 })();

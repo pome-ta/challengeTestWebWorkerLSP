@@ -5,7 +5,7 @@ import {expect} from 'chai';
 
 console.log('🧩 worker-shutdown.test.js loaded');
 
-const orederedList = document.getElementById('testOrdered');
+const orderedList = document.getElementById('testOrdered');
 const liItem = document.createElement('li');
 
 let textContent;
@@ -53,5 +53,5 @@ let textContent;
   }
 
   liItem.textContent = textContent;
-  orederedList.appendChild(liItem);
+  orderedList.appendChild(liItem);
 })();
