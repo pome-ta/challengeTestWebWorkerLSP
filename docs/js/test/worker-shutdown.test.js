@@ -10,8 +10,6 @@ const liItem = document.createElement('li');
 
 let textContent;
 
-
-
 // --- テスト開始 ---
 (async () => {
   try {
@@ -19,7 +17,10 @@ let textContent;
 
     // まず ready を待つ
     await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('No ready signal')), 2000);
+      const timer = setTimeout(
+        () => reject(new Error('No ready signal')),
+        2000
+      );
       worker.onmessage = (event) => {
         if (event.data === 'ready') {
           clearTimeout(timer);
@@ -33,7 +34,10 @@ let textContent;
 
     // shutdown-complete を待つ
     const message = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('No shutdown-complete response')), 2000);
+      const timer = setTimeout(
+        () => reject(new Error('No shutdown-complete response')),
+        2000
+      );
       worker.onmessage = (event) => {
         clearTimeout(timer);
         resolve(event.data);
@@ -43,12 +47,11 @@ let textContent;
     expect(message).to.equal('shutdown-complete');
     textContent = '✅ Worker shutdown test passed';
     console.log('✅ Worker shutdown test passed');
-
   } catch (error) {
     textContent = `❌ Worker shutdown test failed: ${error.message}`;
     console.error(`❌ Worker shutdown test failed: ${error}`);
   }
-  
+
   liItem.textContent = textContent;
   orederedList.appendChild(liItem);
 })();

@@ -1,32 +1,31 @@
 // worker.js
 // v0.0.0.4
 
-
 const DEBUG = true;
 
-const log = (msg) => {
-  if (DEBUG) self.postMessage({ __workerLog: msg });
+const postLog = (message) => {
+  DEBUG && self.postMessage({ type: 'log', message });
+  // if (DEBUG) {
+  //   self.postMessage({ type: 'log', message });
+  // }
 };
 
-log('👷 worker.js loaded');
-
-
+postLog('👷 worker.js loaded');
 
 self.addEventListener('message', (event) => {
   const { data } = event;
 
   if (data === 'ping') {
-    log('📡 Received: ping');
-    self.postMessage('pong');
+    postLog('📡 Received: ping');
+    self.postMessage({ type: 'response', message: 'pong' });
   }
 
-
   if (data === 'shutdown') {
-    log('👋 Worker shutting down...');
-    self.postMessage('shutdown-complete');
-    self.close(); // ワーカーを終了
+    postLog('👋 Worker shutting down...');
+    self.postMessage({ type: 'response', message: 'shutdown-complete' });
+    self.close();
   }
 });
 
-self.postMessage('ready');
-
+// ready 通知
+self.postMessage({ type: 'ready' });

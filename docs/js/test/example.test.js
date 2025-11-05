@@ -1,4 +1,4 @@
-import {expect} from 'https://esm.sh/chai@5.1.1';
+import { expect } from 'https://esm.sh/chai@5.1.1';
 
 console.log('🧩 sample.test.js loaded');
 
