@@ -5,9 +5,6 @@ const DEBUG = true;
 
 const postLog = (message) => {
   DEBUG && self.postMessage({type: 'log', message});
-  // if (DEBUG) {
-  //   self.postMessage({ type: 'log', message });
-  // }
 };
 
 postLog('👷 worker.js loaded');
