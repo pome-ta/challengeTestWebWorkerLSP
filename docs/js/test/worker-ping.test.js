@@ -14,7 +14,7 @@ let textContent;
 // --- テスト開始 ---
 (async () => {
   try {
-    const worker = new Worker('./js/worker.js', {type: 'module'});
+    const worker = createTestWorker('./js/worker.js');
 
     // Worker の初期化完了を待機
     await new Promise((resolve, reject) => {
@@ -22,27 +22,34 @@ let textContent;
         () => reject(new Error('Worker not ready')),
         2000
       );
-      worker.onmessage = (event) => {
-        if (event.data === 'ready') {
+
+      worker.addEventListener('message', (event) => {
+        const {type} = event.data;
+        if (type === 'ready') {
           clearTimeout(timer);
           resolve();
         }
-      };
+      });
     });
 
     // --- ping テスト ---
+
+    //  ping を送信 ---
+    worker.postMessage('ping');
+
     const response = await new Promise((resolve, reject) => {
       const timer = setTimeout(
         () => reject(new Error('No pong response')),
         2000
       );
 
-      worker.onmessage = (event) => {
-        clearTimeout(timer);
-        resolve(event.data);
-      };
-
-      worker.postMessage('ping');
+      worker.addEventListener('message', (event) => {
+        const {type, message} = event.data;
+        if (type === 'response' && message === 'pong') {
+          clearTimeout(timer);
+          resolve(message);
+        }
+      });
     });
 
     // Worker からの応答を確認(まだ失敗する想定)

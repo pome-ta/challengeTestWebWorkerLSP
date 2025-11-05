@@ -6,9 +6,6 @@ export const createTestWorker = (path) => {
   worker.addEventListener('message', (event) => {
     const {data} = event;
     data?.type === 'log' && console.log(`[WorkerLog] ${data.message}`);
-    // if (data?.type === 'log') {
-    //   console.log(`[WorkerLog] ${data.message}`);
-    // }
   });
 
   return worker;

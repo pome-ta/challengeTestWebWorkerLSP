@@ -23,7 +23,8 @@ self.addEventListener('message', (event) => {
   if (data === 'shutdown') {
     postLog('👋 Worker shutting down...');
     self.postMessage({type: 'response', message: 'shutdown-complete'});
-    self.close();
+    // ログ送信を少し待つ
+    setTimeout(() => self.close(), 100);
   }
 });
 
