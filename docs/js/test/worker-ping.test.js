@@ -1,7 +1,7 @@
 // test/worker-ping.test.js
 // v0.0.0.2
 
-import { expect } from 'chai';
+import {expect} from 'chai';
 
 console.log('🧩 worker-ping.test.js loaded');
 
@@ -13,7 +13,7 @@ let textContent;
 // --- テスト開始 ---
 (async () => {
   try {
-    const worker = new Worker('./js/worker.js', { type: 'module' });
+    const worker = new Worker('./js/worker.js', {type: 'module'});
 
     // Worker の初期化完了を待機
     await new Promise((resolve, reject) => {

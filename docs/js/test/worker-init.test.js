@@ -1,8 +1,8 @@
 // test/worker-init.test.js
 // v0.0.0.1
 
-import { expect } from 'chai';
-import { createTestWorker } from './test-utils.js';
+import {expect} from 'chai';
+import {createTestWorker} from './test-utils.js';
 
 console.log('🧩 worker-init.test.js loaded');
 
@@ -20,7 +20,7 @@ let textContent;
       const timer = setTimeout(() => reject(new Error('Worker timeout')), 2000);
 
       worker.addEventListener('message', (event) => {
-        const { type } = event.data;
+        const {type} = event.data;
         if (type === 'ready') {
           clearTimeout(timer);
           resolve(type);
