@@ -1,7 +1,7 @@
 // test/worker-shutdown.test.js
 // v0.0.0.3
 
-import { expect } from 'chai';
+import {expect} from 'chai';
 
 console.log('🧩 worker-shutdown.test.js loaded');
 
@@ -13,7 +13,7 @@ let textContent;
 // --- テスト開始 ---
 (async () => {
   try {
-    const worker = new Worker('./js/worker.js', { type: 'module' });
+    const worker = new Worker('./js/worker.js', {type: 'module'});
 
     // まず ready を待つ
     await new Promise((resolve, reject) => {
