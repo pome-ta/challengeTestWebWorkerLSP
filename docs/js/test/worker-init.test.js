@@ -2,6 +2,7 @@
 // v0.0.0.1
 
 import { expect } from 'chai';
+import { createTestWorker } from './test-runner.js';
 
 console.log('🧩 worker-init.test.js loaded');
 
@@ -12,11 +13,11 @@ const liItem = document.createElement('li');
 let textContent;
 
 // --- テスト開始 ---
+let message;
 (async () => {
   try {
-    const worker = new Worker('./js/worker.js', { type: 'module' });
-
-    const message = await new Promise((resolve, reject) => {
+    const worker = createTestWorker('./js/worker.js');
+    message = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Worker timeout')), 2000);
 
       worker.onmessage = (event) => {
