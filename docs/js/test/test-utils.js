@@ -5,7 +5,7 @@ export const createTestWorker = (path) => {
 
   worker.addEventListener('message', (event) => {
     const {data} = event;
-    data?.type === 'log' && console.log(`[WorkerLog] ${data.message}`);
+    data?.type === 'log' && console.log(`[${new Date().toLocaleTimeString()}|WorkerLog] ${data.message}`);
   });
 
   return worker;
