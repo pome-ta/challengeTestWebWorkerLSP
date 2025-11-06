@@ -53,7 +53,7 @@ let textContent;
 
     expect(message).to.equal('shutdown-complete');
     textContent = '✅ Worker shutdown test passed';
-    console.log('✅ Worker shutdown test passed');
+    console.log(textContent);
   } catch (error) {
     textContent = `❌ Worker shutdown test failed: ${error.message}`;
     console.error(`❌ Worker shutdown test failed: ${error}`);
