@@ -18,6 +18,7 @@ self.addEventListener('message', (event) => {
   
   // 追加:VFS 初期化テスト
   if (data === 'vfs-init') {
+    // todo: 以下のコードを入れたい
     /*
     const defaultMap = await vfs.createDefaultMapFromCDN(
       {
@@ -28,6 +29,9 @@ self.addEventListener('message', (event) => {
       ts,
     );
     */
+    
+    // 軽いテスト用の`setTimeout`
+    // todo: `createDefaultMapFromCDN` のときは削除する
     setTimeout(() => {
       postLog('💻 vfs-init');
       self.postMessage({type: 'response', message: 'return'});

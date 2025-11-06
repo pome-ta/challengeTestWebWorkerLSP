@@ -18,7 +18,6 @@ let textContent;
 
     worker.postMessage('vfs-init');
 
-    // shutdown-complete を待つ
     const message = await new Promise((resolve, reject) => {
       const timer = setTimeout(
         () => reject(new Error('No vfs-init response')),
