@@ -1,0 +1,46 @@
+// test/worker-vfs-init.test.js
+// v0.0.0.5
+
+import { expect } from 'chai';
+import { createTestWorker } from './test-utils.js';
+
+console.log('🧩 worker-vfs-init.test.js loaded');
+
+const orderedList = document.getElementById('testOrdered');
+const liItem = document.createElement('li');
+
+let textContent;
+
+// --- テスト開始 ---
+(async () => {
+  try {
+    const worker = createTestWorker('./js/worker.js');
+
+    worker.postMessage('vfs-init');
+
+    // shutdown-complete を待つ
+    const message = await new Promise((resolve, reject) => {
+      const timer = setTimeout(
+        () => reject(new Error('No vfs-init response')),
+        2000
+      );
+      worker.addEventListener('message', (event) => {
+        const {type, message} = event.data;
+        if (type === 'response') {
+          clearTimeout(timer);
+          resolve(message);
+        }
+      });
+    });
+
+    expect(message).to.equal('return');
+    textContent = '✅ Worker vfs-init test passed';
+    console.log(textContent);
+  } catch (error) {
+    textContent = `❌ Worker vfs-init test failed: ${error.message}`;
+    console.error(`❌ Worker vfs-init test failed: ${error}`);
+  }
+
+  liItem.textContent = textContent;
+  orderedList.appendChild(liItem);
+})();

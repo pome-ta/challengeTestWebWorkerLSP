@@ -1,5 +1,8 @@
 // worker.js
-// v0.0.0.4
+// v0.0.0.5
+
+import * as vfs from 'https://esm.sh/@typescript/vfs';
+import ts from 'https://esm.sh/typescript';
 
 const DEBUG = true;
 
@@ -11,6 +14,29 @@ postLog('👷 worker.js loaded');
 
 self.addEventListener('message', (event) => {
   const {data} = event;
+  
+  
+  // 追加:VFS 初期化テスト
+  if (data === 'vfs-init') {
+    /*
+    const defaultMap = await vfs.createDefaultMapFromCDN(
+      {
+        target: ts.ScriptTarget.ES2022,
+      },
+      ts.version,
+      false,
+      ts,
+    );
+    */
+    setTimeout(() => {
+      postLog('💻 vfs-init');
+      self.postMessage({type: 'response', message: 'return'});
+    }, 300);
+    
+  }
+  
+
+
 
   if (data === 'ping') {
     postLog('📡 Received: ping');
