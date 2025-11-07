@@ -4,7 +4,6 @@
 import {expect} from 'chai';
 import {createTestWorker} from './test-utils.js';
 
-
 console.log('🧩 worker-shutdown.test.js loaded');
 
 const orderedList = document.getElementById('testOrdered');
@@ -31,7 +30,6 @@ let textContent;
         }
       });
     });
-
 
     // shutdown を送る
     worker.postMessage('shutdown');

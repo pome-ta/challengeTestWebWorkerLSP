@@ -1,8 +1,8 @@
 // test/worker-vfs-init.test.js
 // v0.0.0.5
 
-import { expect } from 'chai';
-import { createTestWorker } from './test-utils.js';
+import {expect} from 'chai';
+import {createTestWorker} from './test-utils.js';
 
 console.log('🧩 worker-vfs-init.test.js loaded');
 

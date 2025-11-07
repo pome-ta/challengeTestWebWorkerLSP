@@ -15,6 +15,7 @@ let textContent;
 (async () => {
   try {
     const worker = createTestWorker('./js/worker.js');
+
     const message = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('Worker timeout')), 2000);
 

@@ -12,28 +12,22 @@ const postLog = (message) => {
 
 postLog('👷 worker.js loaded');
 
-
-
-
 self.addEventListener('message', async (event) => {
   const {data} = event;
-  
-  
+
   // 追加:VFS 初期化テスト
   if (data === 'vfs-init') {
     // todo: 以下のコードを入れたい
-    
+
     const defaultMap = await vfs.createDefaultMapFromCDN(
       {
         target: ts.ScriptTarget.ES2022,
       },
       ts.version,
       false,
-      ts,
+      ts
     );
-    
-    
-    
+
     // 軽いテスト用の`setTimeout`
     // todo: `createDefaultMapFromCDN` のときは削除する
     /*
@@ -45,9 +39,6 @@ self.addEventListener('message', async (event) => {
     postLog('💻 vfs-init');
     self.postMessage({type: 'response', message: 'return'});
   }
-  
-
-
 
   if (data === 'ping') {
     postLog('📡 Received: ping');
