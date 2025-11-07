@@ -17,28 +17,37 @@ self.addEventListener('message', async (event) => {
 
   // 追加:VFS 初期化テスト
   if (data === 'vfs-init') {
-    // todo: 以下のコードを入れたい
+    postLog('💻 vfs-init start');
 
-    const defaultMap = await vfs.createDefaultMapFromCDN(
-      {
-        target: ts.ScriptTarget.ES2022,
-      },
-      ts.version,
-      false,
-      ts
-    );
+    try {
+      const defaultMap = await vfs.createDefaultMapFromCDN(
+        { target: ts.ScriptTarget.ES2022 },
+        ts.version,
+        false,
+        ts
+      );
 
-    // 軽いテスト用の`setTimeout`
-    // todo: `createDefaultMapFromCDN` のときは削除する
-    /*
-    setTimeout(() => {
-      postLog('💻 vfs-init');
-      self.postMessage({type: 'response', message: 'return'});
-    }, 300);
-    */
-    postLog('💻 vfs-init');
-    self.postMessage({type: 'response', message: 'return'});
+      postLog(`📦 defaultMap size: ${defaultMap.size}`);
+
+      // --- Safari 対策 ---
+      // postMessage の直後に GC やスレッド切替が入ると落ちる場合があるため
+      // 少し遅らせて確実に送信
+      setTimeout(() => {
+        try {
+          self.postMessage({ type: 'response', message: 'return' });
+          postLog('📤 vfs-init response sent (delayed)');
+        } catch (e) {
+          postLog(`⚠️ vfs-init postMessage failed: ${e.message}`);
+        }
+      }, 50);
+      // ---------------------
+
+    } catch (error) {
+      postLog(`❌ vfs-init error: ${error.message}`);
+      self.postMessage({ type: 'error', message: error.message });
+    }
   }
+
 
   if (data === 'ping') {
     postLog('📡 Received: ping');
