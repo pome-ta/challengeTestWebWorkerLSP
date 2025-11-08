@@ -1,5 +1,5 @@
 // test/worker-vfs-init.test.js
-// v0.0.0.5
+// v0.0.0.6
 
 import {expect} from 'chai';
 import {createTestWorker} from './test-utils.js';
