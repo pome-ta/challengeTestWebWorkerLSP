@@ -13,7 +13,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 postLog('👷 worker.js loaded');
 
-async function safeCreateDefaultMap(retryCount = 3, perAttemptTimeoutMs = 5000) {
+async function safeCreateDefaultMap(
+  retryCount = 3,
+  perAttemptTimeoutMs = 5000
+) {
   let lastError = null;
 
   for (let attempt = 1; attempt <= retryCount; attempt++) {
@@ -39,10 +42,12 @@ async function safeCreateDefaultMap(retryCount = 3, perAttemptTimeoutMs = 5000) 
 
       postLog(`📦 defaultMap size: ${defaultMap.size}`);
       return defaultMap; // 成功したら返す
-
     } catch (error) {
       lastError = error;
-      if (error.message.includes('fetch') || error.message.includes('NetworkError')) {
+      if (
+        error.message.includes('fetch') ||
+        error.message.includes('NetworkError')
+      ) {
         postLog(`🚫 Network error: ${error.message}`);
         throw error; // ネットワーク系は諦める
       } else if (error.message.includes('timeout')) {
@@ -59,7 +64,6 @@ async function safeCreateDefaultMap(retryCount = 3, perAttemptTimeoutMs = 5000) 
   throw lastError || new Error('VFS init failed after retries');
 }
 
-
 self.addEventListener('message', async (event) => {
   const {data} = event;
 
@@ -72,19 +76,17 @@ self.addEventListener('message', async (event) => {
       // Safari 対策: postMessage 直後の GC 回避
       setTimeout(() => {
         try {
-          self.postMessage({ type: 'response', message: 'return' });
+          self.postMessage({type: 'response', message: 'return'});
           postLog('📤 vfs-init response sent (delayed)');
         } catch (error) {
           postLog(`⚠️ vfs-init postMessage failed: ${error.message}`);
         }
       }, 50);
-
     } catch (error) {
       postLog(`❌ vfs-init error: ${error.message}`);
-      self.postMessage({ type: 'error', message: error.message });
+      self.postMessage({type: 'error', message: error.message});
     }
   }
-
 
   if (data === 'ping') {
     postLog('📡 Received: ping');
