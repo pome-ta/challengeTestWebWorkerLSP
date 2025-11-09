@@ -1,5 +1,5 @@
 // worker.js
-// v0.0.0.6
+// v0.0.1.0
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
@@ -13,16 +13,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 postLog('👷 worker.js loaded');
 
-async function safeCreateDefaultMap(retryCount = 3) {
-  const timeoutMs = 5000; // 各試行あたりのタイムアウト
+async function safeCreateDefaultMap(retryCount = 3, perAttemptTimeoutMs = 5000) {
   let lastError = null;
 
-  for (let i = 0; i < retryCount; i++) {
-    postLog(`🔄 VFS init attempt ${i + 1}/${retryCount}`);
+  for (let attempt = 1; attempt <= retryCount; attempt++) {
+    postLog(`🔄 VFS init attempt ${attempt}/${retryCount}`);
 
     try {
       const timeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), timeoutMs)
+        setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs)
       );
 
       const defaultMap = await Promise.race([
@@ -48,7 +47,7 @@ async function safeCreateDefaultMap(retryCount = 3) {
         throw error; // ネットワーク系は諦める
       } else if (error.message.includes('timeout')) {
         postLog(`⏰ Timeout, retrying...`);
-        await sleep(1000 * (i + 1)); // リトライ間隔を少し伸ばす
+        await sleep(1000 * attempt); // リトライ間隔を少し伸ばす
         continue;
       } else {
         postLog(`❌ Unknown error: ${error.message}`);
@@ -70,14 +69,13 @@ self.addEventListener('message', async (event) => {
 
     try {
       const defaultMap = await safeCreateDefaultMap(3);
-      // --- Safari 対策 ---
-      // postMessage の直後に GC やスレッド切替が入ると落ちる場合があるため、少し遅らせて確実に送信
+      // Safari 対策: postMessage 直後の GC 回避
       setTimeout(() => {
         try {
           self.postMessage({ type: 'response', message: 'return' });
           postLog('📤 vfs-init response sent (delayed)');
-        } catch (e) {
-          postLog(`⚠️ vfs-init postMessage failed: ${e.message}`);
+        } catch (error) {
+          postLog(`⚠️ vfs-init postMessage failed: ${error.message}`);
         }
       }, 50);
 
@@ -86,7 +84,6 @@ self.addEventListener('message', async (event) => {
       self.postMessage({ type: 'error', message: error.message });
     }
   }
-
 
 
   if (data === 'ping') {
