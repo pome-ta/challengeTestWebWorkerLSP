@@ -86,7 +86,10 @@ self.addEventListener('message', async (event) => {
       };
       const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
 
-      postLog(`🧠 env created. env: ${env}`);
+      //postLog(`🧠 env created. env: ${env}`);
+      
+      // name, sys, languageService, getSourceFile, createFile, updateFile, deleteFile
+      postLog(`🧠 env keys: ${Object.keys(env).join(', ')}`);
 
       // テスト結果を返す
       self.postMessage({
