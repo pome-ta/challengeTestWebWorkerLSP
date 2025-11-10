@@ -1,5 +1,5 @@
 // worker.js
-// v0.0.1.0
+// v0.0.1.1
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
@@ -66,8 +66,43 @@ async function safeCreateDefaultMap(
 
 self.addEventListener('message', async (event) => {
   const {data} = event;
+  
+  
+  if (data === 'vfs-env-test') {
+    postLog('💻 vfs-env-test start');
+    try {
+      const defaultMap = await safeCreateDefaultMap(3);
 
-  // 追加:VFS 初期化テスト
+      const system = vfs.createSystem(defaultMap);
+      const compilerOptions = {
+        target: ts.ScriptTarget.ES2022,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        allowArbitraryExtensions: true,
+        allowJs: true,
+        checkJs: true,
+        strict: true,
+        noUnusedLocals: true,
+        noUnusedParameters: true,
+      };
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+
+      postLog(`🧠 env created. rootFiles: ${env.sys.getFileNames().length}`);
+
+      // テスト結果を返す
+      self.postMessage({
+        type: 'response',
+        message: {
+          status: 'ok',
+          fileCount: env.sys.getFileNames().length,
+        },
+      });
+    } catch (error) {
+      postLog(`❌ vfs-env-test error: ${error.message}`);
+      self.postMessage({ type: 'error', message: error.message });
+    }
+  }
+
+
   if (data === 'vfs-init') {
     postLog('💻 vfs-init start');
 
