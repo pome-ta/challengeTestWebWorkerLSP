@@ -27,7 +27,6 @@ const liItem = document.createElement('li');
     });
 
     expect(result.status).to.equal('ok');
-    //expect(result.fileCount).to.be.greaterThan(0);
 
     textContent = `✅ Worker vfs-env-test passed response:${result.status}`;
     console.log(textContent);
