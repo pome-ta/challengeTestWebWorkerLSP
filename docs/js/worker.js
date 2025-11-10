@@ -85,17 +85,23 @@ self.addEventListener('message', async (event) => {
         noUnusedParameters: true,
       };
       const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
-
-      //postLog(`🧠 env created. env: ${env}`);
+      
+       // ファイル作成
+      env.createFile('hello.ts', 'const x: number = "string";');
+      // 構文解析
+      const diagnostics = env.languageService.getSemanticDiagnostics('hello.ts');
+      // テスト結果を返す
       
       // name, sys, languageService, getSourceFile, createFile, updateFile, deleteFile
       postLog(`🧠 env keys: ${Object.keys(env).join(', ')}`);
+      
 
       // テスト結果を返す
       self.postMessage({
         type: 'response',
         message: {
           status: 'ok',
+          diagnosticsCount: diagnostics.length,
         },
       });
     } catch (error) {
