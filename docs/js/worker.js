@@ -1,5 +1,5 @@
 // worker.js
-// v0.0.1.1
+// v0.0.1.2
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
@@ -67,6 +67,59 @@ async function safeCreateDefaultMap(
 self.addEventListener('message', async (event) => {
   const {data} = event;
   
+  if (data === 'vfs-file-test') {
+    postLog('💻 vfs-file-test start');
+    try {
+      // defaultMap と env の初期化
+      const defaultMap = await safeCreateDefaultMap(3);
+      postLog(`📦 defaultMap size: ${defaultMap.size}`);
+  
+      const system = vfs.createSystem(defaultMap);
+      const compilerOptions = {
+        target: ts.ScriptTarget.ES2022,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        allowArbitraryExtensions: true,
+        allowJs: true,
+        checkJs: true,
+        strict: true,
+      };
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+  
+      postLog('🧠 env created');
+      // ファイル作成: 型エラーを意図的に含める (semantic diagnostics を確認するため)
+      const filePath = 'hello.ts';
+      const initialText = `// test\nconst x: number = "this-is-a-string";\n`;
+      env.createFile(filePath, initialText);
+      postLog(`📝 created ${filePath}`);
+  
+      // 診断取得 (semantic)
+      const diags = env.languageService.getSemanticDiagnostics(filePath);
+      postLog(`🔍 diagnostics count after create: ${diags.length}`);
+  
+      // updateFile で修正(オプション: 正常化して診断が0になることも検証可能)
+      const fixedText = `// test\nconst x: number = 123;\n`;
+      env.updateFile(filePath, fixedText);
+      postLog(`✏️ updated ${filePath}`);
+  
+      const diagsAfter = env.languageService.getSemanticDiagnostics(filePath);
+      postLog(`🔍 diagnostics count after update: ${diagsAfter.length}`);
+  
+      // レスポンス: 診断数などを返す
+      self.postMessage({
+        type: 'response',
+        message: {
+          status: 'ok',
+          file: filePath,
+          diagnosticsCountBefore: diags.length,
+          diagnosticsCountAfter: diagsAfter.length,
+        },
+      });
+      postLog('📤 vfs-file-test response sent');
+    } catch (error) {
+      postLog(`❌ vfs-file-test error: ${error.message}`);
+      self.postMessage({ type: 'error', message: error.message });
+    }
+  }
   
   if (data === 'vfs-env-test') {
     postLog('💻 vfs-env-test start');
