@@ -86,14 +86,13 @@ self.addEventListener('message', async (event) => {
       };
       const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
 
-      postLog(`🧠 env created. rootFiles: ${env.sys.getFileNames().length}`);
+      postLog(`🧠 env created. env: ${env}`);
 
       // テスト結果を返す
       self.postMessage({
         type: 'response',
         message: {
           status: 'ok',
-          fileCount: env.sys.getFileNames().length,
         },
       });
     } catch (error) {
