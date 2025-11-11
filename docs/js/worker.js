@@ -1,5 +1,5 @@
 // worker.js
-// v0.0.1.2
+// v0.0.1.3
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
@@ -67,48 +67,34 @@ async function safeCreateDefaultMap(
 self.addEventListener('message', async (event) => {
   const {data} = event;
 
-
-
-
-
   if (data === 'vfs-multi-file-test') {
     postLog('💻 vfs-multi-file-test start');
     try {
       const defaultMap = await safeCreateDefaultMap(3);
       const system = vfs.createSystem(defaultMap);
   
-      // -------------- ファイル配置(env作成前に必ず行う) --------------
-      // 明確なエントリポイント名を使う: /main.ts
-      system.writeFile('/a.ts', `export const foo = 1;`);
-      system.writeFile('/main.ts', `import { foo } from './a'; console.log(foo);`);
-      postLog('📝 created /a.ts and /main.ts in VFS');
-  
+      // ファイルを system に書くのではなく env 後に createFile で登録する
       const compilerOptions = {
         target: ts.ScriptTarget.ES2022,
         moduleResolution: ts.ModuleResolutionKind.Bundler,
         allowJs: true,
-        checkJs: true,
         strict: true,
       };
   
-      // env作成時にエントリを渡す → 言語サービスのプログラムに確実に含まれる
       const entry = '/main.ts';
-      const env = vfs.createVirtualTypeScriptEnvironment(
-        system,
-        [entry],
-        ts,
-        compilerOptions
-      );
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
       postLog('🧠 env created');
   
-      // --- 初期診断(エントリ側) ---
+      // env 経由でファイルを追加
+      env.createFile('/a.ts', `export const foo = 1;`);
+      env.createFile(entry, `import { foo } from './a'; console.log(foo);`);
+      postLog('📝 created /a.ts and /main.ts in env');
+  
       const before = env.languageService.getSemanticDiagnostics(entry).length;
       postLog(`🔍 diagnostics before: ${before}`);
   
-      // --- 意図的に a.ts を壊してエラーを誘発(エントリに影響) ---
-      // export をコメントアウトすることで main.ts の import が壊れる
-      system.writeFile('/a.ts', `// export const foo = 1;`);
-      // 言語サービスのキャッシュがある場合に備え、言語サービス呼び出し直後の反映を期待
+      // ファイル内容を updateFile 経由で壊す(キャッシュが更新される)
+      env.updateFile('/a.ts', `// export const foo = 1;`);
       const after = env.languageService.getSemanticDiagnostics(entry).length;
       postLog(`🔍 diagnostics after: ${after}`);
   
@@ -133,8 +119,6 @@ self.addEventListener('message', async (event) => {
       });
     }
   }
-  
-
 
   if (data === 'vfs-file-test') {
     postLog('💻 vfs-file-test start');
