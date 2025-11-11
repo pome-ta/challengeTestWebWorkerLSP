@@ -1,5 +1,5 @@
 // worker.js
-// v0.0.1.3
+// v0.0.1.4
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
@@ -66,6 +66,73 @@ async function safeCreateDefaultMap(
 
 self.addEventListener('message', async (event) => {
   const {data} = event;
+
+
+  if (data === 'vfs-delete-test') {
+    postLog('💻 vfs-delete-test start');
+    try {
+      // 1. VFS初期化
+      const defaultMap = await safeCreateDefaultMap(3);
+      const system = vfs.createSystem(defaultMap);
+  
+      const compilerOptions = {
+        target: ts.ScriptTarget.ES2022,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        allowArbitraryExtensions: true,
+        allowJs: true,
+        checkJs: true,
+        strict: true,
+        noUnusedLocals: true,
+        noUnusedParameters: true,
+      };
+  
+      const entry = '/main.ts';
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+      postLog('🧠 env created');
+  
+      // 2. ファイル作成
+      env.createFile('/a.ts', `export const msg = "hello";`);
+      env.createFile(entry, `import { msg } from "./a"; console.log(msg);`);
+      postLog('📝 created /a.ts and /main.ts in env');
+  
+      // 3. 削除前診断
+      const before = env.languageService.getSemanticDiagnostics(entry).length;
+      postLog(`🔍 diagnostics before: ${before}`);
+  
+      // 4. ファイル削除
+      env.deleteFile('/a.ts');
+      postLog('🗑️ deleted /a.ts');
+  
+      // 5. 削除後診断
+      const diagnosticsAfter = env.languageService.getSemanticDiagnostics(entry);
+      const after = diagnosticsAfter.length;
+      postLog(`🔍 diagnostics after: ${after}`);
+  
+      // 6. 結果評価
+      const hasImportError = diagnosticsAfter.some(d => d.code === 2307);
+      const passed = before === 0 && after > 0 && hasImportError;
+      postLog(passed ? '✅ vfs-delete logic OK' : '❌ vfs-delete logic failed');
+  
+      // 7. 結果送信
+      self.postMessage({
+        type: 'response',
+        message: {
+          test: 'vfs-delete-test',
+          entry,
+          before,
+          after,
+          status: passed ? 'ok' : 'fail',
+          errorCode: hasImportError ? 'TS2307' : null,
+        },
+      });
+    } catch (error) {
+      postLog(`❌ vfs-delete-test error: ${error.message}`);
+      self.postMessage({
+        type: 'error',
+        message: `vfs-delete-test failed: ${error.message}`,
+      });
+    }
+  }
 
   if (data === 'vfs-multi-file-test') {
     postLog('💻 vfs-multi-file-test start');

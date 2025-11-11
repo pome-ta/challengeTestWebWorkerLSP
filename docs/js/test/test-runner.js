@@ -1,5 +1,5 @@
 // test/test-runner.js
-// v0.0.1.3
+// v0.0.1.4
 
 console.log('🚀 test-runner.js loaded');
 
@@ -10,8 +10,9 @@ import './worker-shutdown.test.js';
 import './worker-vfs-init.test.js';
 import './worker-vfs-env.test.js';
 import './worker-vfs-file.test.js';
+import './worker-vfs-multi-file.test.js';
 */
 
 
-import './worker-vfs-multi-file.test.js';
+import './worker-vfs-delete.test.js';
 
