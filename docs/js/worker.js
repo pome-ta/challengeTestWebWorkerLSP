@@ -66,7 +66,54 @@ async function safeCreateDefaultMap(
 
 self.addEventListener('message', async (event) => {
   const {data} = event;
+
+  // worker.js 内の message listener に追加
+  if (data === 'vfs-multi-file-test') {
+    postLog('💻 vfs-multi-file-test start');
+    try {
+      const defaultMap = await safeCreateDefaultMap(3);
+      const system = vfs.createSystem(defaultMap);
+      const compilerOptions = {
+        target: ts.ScriptTarget.ES2022,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+      };
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
   
+      env.createFile('a.ts', `export const foo = 1;`);
+      env.createFile('b.ts', `import { foo } from "./a"; console.log(foo);`);
+      postLog('📝 created a.ts, b.ts');
+  
+      const before = env.languageService.getSemanticDiagnostics('b.ts').length;
+      postLog(`🔍 diagnostics before: ${before}`);
+  
+      // エラーを誘発する
+      env.updateFile('a.ts', `// export const foo = 1;`);
+      const after = env.languageService.getSemanticDiagnostics('b.ts').length;
+      postLog(`🔍 diagnostics after: ${after}`);
+  
+      const passed = before === 0 && after > 0;
+      postLog(passed ? '✅ multi-file logic OK' : '❌ multi-file logic failed');
+  
+      self.postMessage({
+        type: 'response',
+        message: {
+          test: 'vfs-multi-file-test',
+          before,
+          after,
+          status: passed ? 'ok' : 'fail',
+        },
+      });
+    } catch (error) {
+      postLog(`❌ vfs-multi-file-test error: ${error.message}`);
+      self.postMessage({
+        type: 'error',
+        message: `vfs-multi-file-test failed: ${error.message}`,
+      });
+    }
+  }
+
+
+
   if (data === 'vfs-file-test') {
     postLog('💻 vfs-file-test start');
     try {
