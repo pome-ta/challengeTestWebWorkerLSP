@@ -68,6 +68,48 @@ self.addEventListener('message', async (event) => {
   const {data} = event;
 
 
+  if (data === 'vfs-missing-import-test') {
+    postLog('💻 vfs-missing-import-test start');
+    try {
+      const defaultMap = await safeCreateDefaultMap(3);
+      const system = vfs.createSystem(defaultMap);
+      const compilerOptions = {
+        target: ts.ScriptTarget.ES2022,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+      };
+  
+      const entry = '/main.ts';
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+      postLog('🧠 env created');
+  
+      // 存在しないファイルを import
+      env.createFile(entry, `import { foo } from './not-exist'; console.log(foo);`);
+      postLog('📝 created /main.ts with missing import');
+  
+      const diags = env.languageService.getSemanticDiagnostics(entry);
+      const hasImportError = diags.some(d => d.messageText.includes('Cannot find module'));
+  
+      postLog(`🔍 diagnostics count: ${diags.length}`);
+      postLog(hasImportError ? '✅ missing-import logic OK' : '❌ missing-import logic failed');
+  
+      self.postMessage({
+        type: 'response',
+        message: {
+          test: 'vfs-missing-import-test',
+          status: hasImportError ? 'ok' : 'fail',
+          diagnostics: diags.map(d => d.messageText),
+        },
+      });
+    } catch (error) {
+      postLog(`❌ vfs-missing-import-test error: ${error.message}`);
+      self.postMessage({
+        type: 'error',
+        message: `vfs-missing-import-test failed: ${error.message}`,
+      });
+    }
+  }
+  
+
   if (data === 'vfs-delete-test') {
     postLog('💻 vfs-delete-test start');
     try {
