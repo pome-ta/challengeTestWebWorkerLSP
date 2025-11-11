@@ -17,25 +17,30 @@ const liItem = document.createElement('li');
     worker.postMessage('vfs-multi-file-test');
 
     const result = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('No response')), 15000);
+      const timer = setTimeout(() => reject(new Error('No response')), 5000);
       worker.addEventListener('message', (event) => {
-        const { type, message } = event.data;
+        const { type, message } = event.data ?? {};
         if (type === 'response' && message?.test === 'vfs-multi-file-test') {
           clearTimeout(timer);
           resolve(message);
         }
+        if (type === 'error') {
+          clearTimeout(timer);
+          reject(new Error(message || 'worker error'));
+        }
       });
     });
 
+    // 結果の検証: before が 0 で after が増えていること
     expect(result.before).to.equal(0);
     expect(result.after).to.be.greaterThan(0);
-
-    textContent = `✅ Worker vfs-multi-file-test passed (before:${result.before} → after:${result.after})`;
+    textContent = `✅ Worker vfs-multi-file-test passed (entry:${result.entry} before:${result.before} after:${result.after})`;
     console.log(textContent);
   } catch (error) {
     textContent = `❌ Worker vfs-multi-file-test failed: ${error.message}`;
     console.error(textContent);
   }
+
 
   liItem.textContent = textContent;
   orderedList.appendChild(liItem);

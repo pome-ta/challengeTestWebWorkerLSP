@@ -67,28 +67,49 @@ async function safeCreateDefaultMap(
 self.addEventListener('message', async (event) => {
   const {data} = event;
 
-  // worker.js 内の message listener に追加
+
+
+
+
   if (data === 'vfs-multi-file-test') {
     postLog('💻 vfs-multi-file-test start');
     try {
       const defaultMap = await safeCreateDefaultMap(3);
       const system = vfs.createSystem(defaultMap);
+  
+      // -------------- ファイル配置(env作成前に必ず行う) --------------
+      // 明確なエントリポイント名を使う: /main.ts
+      system.writeFile('/a.ts', `export const foo = 1;`);
+      system.writeFile('/main.ts', `import { foo } from './a'; console.log(foo);`);
+      postLog('📝 created /a.ts and /main.ts in VFS');
+  
       const compilerOptions = {
         target: ts.ScriptTarget.ES2022,
         moduleResolution: ts.ModuleResolutionKind.Bundler,
+        allowJs: true,
+        checkJs: true,
+        strict: true,
       };
-      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
   
-      env.createFile('a.ts', `export const foo = 1;`);
-      env.createFile('b.ts', `import { foo } from "./a"; console.log(foo);`);
-      postLog('📝 created a.ts, b.ts');
+      // env作成時にエントリを渡す → 言語サービスのプログラムに確実に含まれる
+      const entry = '/main.ts';
+      const env = vfs.createVirtualTypeScriptEnvironment(
+        system,
+        [entry],
+        ts,
+        compilerOptions
+      );
+      postLog('🧠 env created');
   
-      const before = env.languageService.getSemanticDiagnostics('b.ts').length;
+      // --- 初期診断(エントリ側) ---
+      const before = env.languageService.getSemanticDiagnostics(entry).length;
       postLog(`🔍 diagnostics before: ${before}`);
   
-      // エラーを誘発する
-      env.updateFile('a.ts', `// export const foo = 1;`);
-      const after = env.languageService.getSemanticDiagnostics('b.ts').length;
+      // --- 意図的に a.ts を壊してエラーを誘発(エントリに影響) ---
+      // export をコメントアウトすることで main.ts の import が壊れる
+      system.writeFile('/a.ts', `// export const foo = 1;`);
+      // 言語サービスのキャッシュがある場合に備え、言語サービス呼び出し直後の反映を期待
+      const after = env.languageService.getSemanticDiagnostics(entry).length;
       postLog(`🔍 diagnostics after: ${after}`);
   
       const passed = before === 0 && after > 0;
@@ -98,6 +119,7 @@ self.addEventListener('message', async (event) => {
         type: 'response',
         message: {
           test: 'vfs-multi-file-test',
+          entry,
           before,
           after,
           status: passed ? 'ok' : 'fail',
@@ -111,7 +133,7 @@ self.addEventListener('message', async (event) => {
       });
     }
   }
-
+  
 
 
   if (data === 'vfs-file-test') {
