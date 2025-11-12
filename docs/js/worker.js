@@ -1,5 +1,5 @@
 // worker.js
-// v0.0.1.6
+// v0.0.1.7
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
@@ -68,6 +68,52 @@ self.addEventListener('message', async (event) => {
   const {data} = event;
 
 
+  if (data === 'vfs-update-recheck-test') {
+    postLog('💻 vfs-update-recheck-test start');
+    try {
+      const defaultMap = await safeCreateDefaultMap(3);
+      const system = vfs.createSystem(defaultMap);
+      const compilerOptions = {
+        target: ts.ScriptTarget.ES2022,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        strict: true,
+      };
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+      postLog('🧠 env created');
+  
+      const entry = '/main.ts';
+      env.createFile(entry, `const x: number = 1;`);
+      postLog('📝 created /main.ts with valid code');
+  
+      const before = env.languageService.getSemanticDiagnostics(entry).length;
+      postLog(`🔍 diagnostics before update: ${before}`);
+  
+      env.updateFile(entry, `const x: string = 1;`);
+      postLog('✏️ updated /main.ts (type mismatch)');
+  
+      const after = env.languageService.getSemanticDiagnostics(entry).length;
+      postLog(`🔍 diagnostics after update: ${after}`);
+  
+      const passed = before === 0 && after > 0;
+      postLog(passed ? '✅ update-recheck logic OK' : '❌ update-recheck logic failed');
+  
+      self.postMessage({
+        type: 'response',
+        message: {
+          test: 'vfs-update-recheck-test',
+          before,
+          after,
+          status: passed ? 'ok' : 'fail',
+        },
+      });
+    } catch (error) {
+      postLog(`❌ vfs-update-recheck-test error: ${error.message}`);
+      self.postMessage({
+        type: 'error',
+        message: `vfs-update-recheck-test failed: ${error.message}`,
+      });
+    }
+  }
 
   if (data === 'vfs-circular-import-test') {
     postLog('💻 vfs-circular-import-test start');
