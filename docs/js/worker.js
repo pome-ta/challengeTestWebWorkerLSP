@@ -1,5 +1,5 @@
 // worker.js
-// v0.0.1.4
+// v0.0.1.6
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
@@ -66,6 +66,46 @@ async function safeCreateDefaultMap(
 
 self.addEventListener('message', async (event) => {
   const {data} = event;
+
+
+
+  if (data === 'vfs-circular-import-test') {
+    postLog('💻 vfs-circular-import-test start');
+    try {
+      const defaultMap = await safeCreateDefaultMap(3);
+      const system = vfs.createSystem(defaultMap);
+      const compilerOptions = {
+        target: ts.ScriptTarget.ES2022,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+      };
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+      postLog('🧠 env created');
+  
+      // ファイルを相互 import
+      env.createFile('/a.ts', `import { b } from './b'; export const a = b + 1;`);
+      env.createFile('/b.ts', `import { a } from './a'; export const b = a + 1;`);
+      const entry = '/a.ts';
+      postLog('📝 created /a.ts and /b.ts (circular imports)');
+  
+      const diagnostics = env.languageService.getSemanticDiagnostics(entry);
+      const count = diagnostics.length;
+      postLog(`🔍 diagnostics count: ${count}`);
+  
+      const passed = count > 0;
+      postLog(passed ? '✅ circular-import logic OK' : '❌ circular-import logic failed');
+  
+      self.postMessage({
+        type: 'response',
+        message: { test: 'vfs-circular-import-test', count, status: passed ? 'ok' : 'fail' },
+      });
+    } catch (error) {
+      postLog(`❌ vfs-circular-import-test error: ${error.message}`);
+      self.postMessage({
+        type: 'error',
+        message: `vfs-circular-import-test failed: ${error.message}`,
+      });
+    }
+  }
 
 
   if (data === 'vfs-missing-import-test') {
