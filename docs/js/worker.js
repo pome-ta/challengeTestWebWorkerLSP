@@ -1,210 +1,453 @@
 // worker.js
-// v0.0.2.0
-//
-// Entrypoint worker: dispatches messages to core modules.
-// Keeps previous test-compatible logging interface: postLog(msg).
-//
-// Exports nothing; executed as worker module.
+// v0.0.1.7
 
-import * as vfsCore from './core/vfs-core.js';
-import * as lspCore from './core/lsp-core.js';
+import * as vfs from 'https://esm.sh/@typescript/vfs';
+import ts from 'https://esm.sh/typescript';
 
 const DEBUG = true;
-const postLog = (msg) => {
-  if (DEBUG) {
-    // structured message for main-side test utils
+
+const postLog = (message) => {
+  DEBUG && self.postMessage({type: 'log', message});
+};
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+postLog('👷 worker.js loaded');
+
+async function safeCreateDefaultMap(
+  retryCount = 3,
+  perAttemptTimeoutMs = 5000
+) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= retryCount; attempt++) {
+    postLog(`🔄 VFS init attempt ${attempt}/${retryCount}`);
+
     try {
-      self.postMessage({ type: 'log', message: `${msg}` });
-    } catch (e) {
-      // best-effort
-      console.error('[worker] postLog failed', e, msg);
-    }
-  }
-};
+      const timeout = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs)
+      );
 
-const safeHandlerCall = async (fn, args = [], timeoutMs = 0) => {
-  if (timeoutMs > 0) {
-    return Promise.race([fn(...args), new Promise((_, rej) => setTimeout(() => rej(new Error('handler timeout')), timeoutMs))]);
-  } else {
-    return fn(...args);
-  }
-};
+      const defaultMap = await Promise.race([
+        vfs.createDefaultMapFromCDN(
+          {
+            target: ts.ScriptTarget.ES2022,
+            module: ts.ModuleKind.ESNext,
+          },
+          ts.version,
+          false,
+          ts
+        ),
+        timeout,
+      ]);
 
-self.addEventListener('message', async (ev) => {
-  const data = ev.data;
-  try {
-    // simple string commands (keeps compatibility with existing tests)
-    if (typeof data === 'string') {
-      switch (data) {
-        case 'vfs-init': {
-          postLog('💻 vfs-init start');
-          try {
-            const meta = await vfsCore.runVfsInit((m) => postLog(m));
-            // delay slightly for Safari GC race observed previously
-            setTimeout(() => {
-              self.postMessage({ type: 'response', message: 'return', meta });
-              postLog('📤 vfs-init response sent (delayed)');
-            }, 50);
-          } catch (err) {
-            postLog(`❌ vfs-init error: ${err.message}`);
-            self.postMessage({ type: 'error', message: err.message });
-          }
-          return;
-        }
-        case 'ping': {
-          postLog('📡 Received: ping');
-          self.postMessage({ type: 'response', message: 'pong' });
-          return;
-        }
-        case 'shutdown': {
-          postLog('👋 Worker shutting down...');
-          self.postMessage({ type: 'response', message: 'shutdown-complete' });
-          // small grace for logs to flush
-          setTimeout(() => self.close(), 100);
-          return;
-        }
-        // VFS test commands (mirror previous behavior)
-        case 'vfs-file-test': {
-          postLog('💻 vfs-file-test start');
-          try {
-            const res = await vfsCore.runFileTest((m) => postLog(m));
-            self.postMessage({ type: 'response', message: res });
-            postLog('📤 vfs-file-test response sent');
-          } catch (err) {
-            postLog(`❌ vfs-file-test error: ${err.message}`);
-            self.postMessage({ type: 'error', message: err.message });
-          }
-          return;
-        }
-        case 'vfs-update-recheck-test': {
-          postLog('💻 vfs-update-recheck-test start');
-          try {
-            const res = await vfsCore.runUpdateRecheckTest((m) => postLog(m));
-            self.postMessage({ type: 'response', message: res });
-            postLog('📤 vfs-update-recheck-test response sent');
-          } catch (err) {
-            postLog(`❌ vfs-update-recheck-test error: ${err.message}`);
-            self.postMessage({ type: 'error', message: err.message });
-          }
-          return;
-        }
-        case 'vfs-multi-file-test': {
-          postLog('💻 vfs-multi-file-test start');
-          try {
-            const res = await vfsCore.runMultiFileTest((m) => postLog(m));
-            self.postMessage({ type: 'response', message: res });
-            postLog('📤 vfs-multi-file-test response sent');
-          } catch (err) {
-            postLog(`❌ vfs-multi-file-test error: ${err.message}`);
-            self.postMessage({ type: 'error', message: err.message });
-          }
-          return;
-        }
-        case 'vfs-delete-test': {
-          postLog('💻 vfs-delete-test start');
-          try {
-            const res = await vfsCore.runDeleteTest((m) => postLog(m));
-            self.postMessage({ type: 'response', message: res });
-            postLog('📤 vfs-delete-test response sent');
-          } catch (err) {
-            postLog(`❌ vfs-delete-test error: ${err.message}`);
-            self.postMessage({ type: 'error', message: err.message });
-          }
-          return;
-        }
-        case 'vfs-missing-import-test': {
-          postLog('💻 vfs-missing-import-test start');
-          try {
-            const res = await vfsCore.runMissingImportTest((m) => postLog(m));
-            self.postMessage({ type: 'response', message: res });
-            postLog('📤 vfs-missing-import-test response sent');
-          } catch (err) {
-            postLog(`❌ vfs-missing-import-test error: ${err.message}`);
-            self.postMessage({ type: 'error', message: err.message });
-          }
-          return;
-        }
-        case 'vfs-circular-import-test': {
-          postLog('💻 vfs-circular-import-test start');
-          try {
-            const res = await vfsCore.runCircularImportTest((m) => postLog(m));
-            self.postMessage({ type: 'response', message: res });
-            postLog('📤 vfs-circular-import-test response sent');
-          } catch (err) {
-            postLog(`❌ vfs-circular-import-test error: ${err.message}`);
-            self.postMessage({ type: 'error', message: err.message });
-          }
-          return;
-        }
-        case 'vfs-env-test': {
-          postLog('💻 vfs-env-test start');
-          try {
-            const defaultMap = await vfsCore.safeCreateDefaultMap((m) => postLog(m));
-            const { env } = vfsCore.createEnv(defaultMap, self.ts ?? undefined, {}); // ts injection not used here, kept for symmetry
-            postLog(`🧠 env created`);
-            // small info returned
-            self.postMessage({ type: 'response', message: { status: 'ok' } });
-          } catch (err) {
-            postLog(`❌ vfs-env-test error: ${err.message}`);
-            self.postMessage({ type: 'error', message: err.message });
-          }
-          return;
-        }
-        default:
-          // unknown string - ignore
-          return;
+      postLog(`📦 defaultMap size: ${defaultMap.size}`);
+      return defaultMap; // 成功したら返す
+    } catch (error) {
+      lastError = error;
+      if (
+        error.message.includes('fetch') ||
+        error.message.includes('NetworkError')
+      ) {
+        postLog(`🚫 Network error: ${error.message}`);
+        throw error; // ネットワーク系は諦める
+      } else if (error.message.includes('timeout')) {
+        postLog(`⏰ Timeout, retrying...`);
+        await sleep(1000 * attempt); // リトライ間隔を少し伸ばす
+        continue;
+      } else {
+        postLog(`❌ Unknown error: ${error.message}`);
+        throw error;
       }
     }
+  }
 
-    // If data is object (possible RPC shape), handle lightweight LSP lifecycle calls
-    if (data && typeof data === 'object' && data.method) {
-      const { method, params, id } = data;
-      // simple mapping
-      try {
-        switch (method) {
-          case 'initialize': {
-            const result = await safeHandlerCall(lspCore.initialize, [params ?? {}, (m)=>postLog(m)]);
-            if (id !== undefined) self.postMessage(JSON.stringify({ jsonrpc: '2.0', id, result }));
-            return;
-          }
-          case 'initialized': {
-            await lspCore.initialized(params ?? {}, (m)=>postLog(m));
-            // notification -> no response
-            return;
-          }
-          case 'shutdown': {
-            const result = await lspCore.shutdown(params ?? {}, (m)=>postLog(m));
-            if (id !== undefined) self.postMessage(JSON.stringify({ jsonrpc: '2.0', id, result }));
-            return;
-          }
-          case 'ping': {
-            const result = await lspCore.ping(params ?? {}, (m)=>postLog(m));
-            if (id !== undefined) self.postMessage(JSON.stringify({ jsonrpc: '2.0', id, result }));
-            return;
-          }
-          default: {
-            postLog(`❓ unknown RPC method: ${method}`);
-            if (id !== undefined) {
-              self.postMessage(JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32601, message: `Method not found: ${method}` } }));
-            }
-            return;
-          }
-        }
-      } catch (err) {
-        if (id !== undefined) {
-          self.postMessage(JSON.stringify({ jsonrpc: '2.0', id, error: { code: -32000, message: String(err?.message ?? err) } }));
-        } else {
-          postLog(`❌ handler error: ${err?.message ?? err}`);
-        }
-        return;
-      }
+  throw lastError || new Error('VFS init failed after retries');
+}
+
+self.addEventListener('message', async (event) => {
+  const {data} = event;
+
+
+  if (data === 'vfs-update-recheck-test') {
+    postLog('💻 vfs-update-recheck-test start');
+    try {
+      const defaultMap = await safeCreateDefaultMap(3);
+      const system = vfs.createSystem(defaultMap);
+      const compilerOptions = {
+        target: ts.ScriptTarget.ES2022,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        strict: true,
+      };
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+      postLog('🧠 env created');
+  
+      const entry = '/main.ts';
+      env.createFile(entry, `const x: number = 1;`);
+      postLog('📝 created /main.ts with valid code');
+  
+      const before = env.languageService.getSemanticDiagnostics(entry).length;
+      postLog(`🔍 diagnostics before update: ${before}`);
+  
+      env.updateFile(entry, `const x: string = 1;`);
+      postLog('✏️ updated /main.ts (type mismatch)');
+  
+      const after = env.languageService.getSemanticDiagnostics(entry).length;
+      postLog(`🔍 diagnostics after update: ${after}`);
+  
+      const passed = before === 0 && after > 0;
+      postLog(passed ? '✅ update-recheck logic OK' : '❌ update-recheck logic failed');
+  
+      self.postMessage({
+        type: 'response',
+        message: {
+          test: 'vfs-update-recheck-test',
+          before,
+          after,
+          status: passed ? 'ok' : 'fail',
+        },
+      });
+    } catch (error) {
+      postLog(`❌ vfs-update-recheck-test error: ${error.message}`);
+      self.postMessage({
+        type: 'error',
+        message: `vfs-update-recheck-test failed: ${error.message}`,
+      });
     }
-  } catch (err) {
-    postLog(`❌ worker top-level handler error: ${String(err?.message ?? err)}`);
+  }
+
+  if (data === 'vfs-circular-import-test') {
+    postLog('💻 vfs-circular-import-test start');
+    try {
+      const defaultMap = await safeCreateDefaultMap(3);
+      const system = vfs.createSystem(defaultMap);
+      const compilerOptions = {
+        target: ts.ScriptTarget.ES2022,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+      };
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+      postLog('🧠 env created');
+  
+      // ファイルを相互 import
+      env.createFile('/a.ts', `import { b } from './b'; export const a = b + 1;`);
+      env.createFile('/b.ts', `import { a } from './a'; export const b = a + 1;`);
+      const entry = '/a.ts';
+      postLog('📝 created /a.ts and /b.ts (circular imports)');
+  
+      const diagnostics = env.languageService.getSemanticDiagnostics(entry);
+      const count = diagnostics.length;
+      postLog(`🔍 diagnostics count: ${count}`);
+  
+      const passed = count > 0;
+      postLog(passed ? '✅ circular-import logic OK' : '❌ circular-import logic failed');
+  
+      self.postMessage({
+        type: 'response',
+        message: { test: 'vfs-circular-import-test', count, status: passed ? 'ok' : 'fail' },
+      });
+    } catch (error) {
+      postLog(`❌ vfs-circular-import-test error: ${error.message}`);
+      self.postMessage({
+        type: 'error',
+        message: `vfs-circular-import-test failed: ${error.message}`,
+      });
+    }
+  }
+
+
+  if (data === 'vfs-missing-import-test') {
+    postLog('💻 vfs-missing-import-test start');
+    try {
+      const defaultMap = await safeCreateDefaultMap(3);
+      const system = vfs.createSystem(defaultMap);
+      const compilerOptions = {
+        target: ts.ScriptTarget.ES2022,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+      };
+  
+      const entry = '/main.ts';
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+      postLog('🧠 env created');
+  
+      // 存在しないファイルを import
+      env.createFile(entry, `import { foo } from './not-exist'; console.log(foo);`);
+      postLog('📝 created /main.ts with missing import');
+  
+      const diags = env.languageService.getSemanticDiagnostics(entry);
+      const hasImportError = diags.some(d => d.messageText.includes('Cannot find module'));
+  
+      postLog(`🔍 diagnostics count: ${diags.length}`);
+      postLog(hasImportError ? '✅ missing-import logic OK' : '❌ missing-import logic failed');
+  
+      self.postMessage({
+        type: 'response',
+        message: {
+          test: 'vfs-missing-import-test',
+          status: hasImportError ? 'ok' : 'fail',
+          diagnostics: diags.map(d => d.messageText),
+        },
+      });
+    } catch (error) {
+      postLog(`❌ vfs-missing-import-test error: ${error.message}`);
+      self.postMessage({
+        type: 'error',
+        message: `vfs-missing-import-test failed: ${error.message}`,
+      });
+    }
+  }
+  
+
+  if (data === 'vfs-delete-test') {
+    postLog('💻 vfs-delete-test start');
+    try {
+      // 1. VFS初期化
+      const defaultMap = await safeCreateDefaultMap(3);
+      const system = vfs.createSystem(defaultMap);
+  
+      const compilerOptions = {
+        target: ts.ScriptTarget.ES2022,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        allowArbitraryExtensions: true,
+        allowJs: true,
+        checkJs: true,
+        strict: true,
+        noUnusedLocals: true,
+        noUnusedParameters: true,
+      };
+  
+      const entry = '/main.ts';
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+      postLog('🧠 env created');
+  
+      // 2. ファイル作成
+      env.createFile('/a.ts', `export const msg = "hello";`);
+      env.createFile(entry, `import { msg } from "./a"; console.log(msg);`);
+      postLog('📝 created /a.ts and /main.ts in env');
+  
+      // 3. 削除前診断
+      const before = env.languageService.getSemanticDiagnostics(entry).length;
+      postLog(`🔍 diagnostics before: ${before}`);
+  
+      // 4. ファイル削除
+      env.deleteFile('/a.ts');
+      postLog('🗑️ deleted /a.ts');
+  
+      // 5. 削除後診断
+      const diagnosticsAfter = env.languageService.getSemanticDiagnostics(entry);
+      const after = diagnosticsAfter.length;
+      postLog(`🔍 diagnostics after: ${after}`);
+  
+      // 6. 結果評価
+      const hasImportError = diagnosticsAfter.some(d => d.code === 2307);
+      const passed = before === 0 && after > 0 && hasImportError;
+      postLog(passed ? '✅ vfs-delete logic OK' : '❌ vfs-delete logic failed');
+  
+      // 7. 結果送信
+      self.postMessage({
+        type: 'response',
+        message: {
+          test: 'vfs-delete-test',
+          entry,
+          before,
+          after,
+          status: passed ? 'ok' : 'fail',
+          errorCode: hasImportError ? 'TS2307' : null,
+        },
+      });
+    } catch (error) {
+      postLog(`❌ vfs-delete-test error: ${error.message}`);
+      self.postMessage({
+        type: 'error',
+        message: `vfs-delete-test failed: ${error.message}`,
+      });
+    }
+  }
+
+  if (data === 'vfs-multi-file-test') {
+    postLog('💻 vfs-multi-file-test start');
+    try {
+      const defaultMap = await safeCreateDefaultMap(3);
+      const system = vfs.createSystem(defaultMap);
+  
+      // ファイルを system に書くのではなく env 後に createFile で登録する
+      const compilerOptions = {
+        target: ts.ScriptTarget.ES2022, // 生成するJSのバージョンを指定。'ES2015'以上でないとプライベート識別子(#)などでエラー
+        moduleResolution: ts.ModuleResolutionKind.Bundler, // URLベースのimportなど、モダンなモジュール解決を許可する
+        allowArbitraryExtensions: true, // .js や .ts 以外の拡張子を持つファイルをインポートできるようにする
+        allowJs: true, // .js ファイルのコンパイルを許可する
+        checkJs: true, // .js ファイルに対しても型チェックを行う (JSDocと連携)
+        strict: true, // すべての厳格な型チェックオプションを有効にする (noImplicitAnyなどを含む)
+        noUnusedLocals: true, // 未使用のローカル変数をエラーとして報告する
+        noUnusedParameters: true, // 未使用の関数パラメータをエラーとして報告する
+      };
+  
+      const entry = '/main.ts';
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+      postLog('🧠 env created');
+  
+      // env 経由でファイルを追加
+      env.createFile('/a.ts', `export const foo = 1;`);
+      env.createFile(entry, `import { foo } from './a'; console.log(foo);`);
+      postLog('📝 created /a.ts and /main.ts in env');
+  
+      const before = env.languageService.getSemanticDiagnostics(entry).length;
+      postLog(`🔍 diagnostics before: ${before}`);
+  
+      // ファイル内容を updateFile 経由で壊す(キャッシュが更新される)
+      env.updateFile('/a.ts', `// export const foo = 1;`);
+      const after = env.languageService.getSemanticDiagnostics(entry).length;
+      postLog(`🔍 diagnostics after: ${after}`);
+  
+      const passed = before === 0 && after > 0;
+      postLog(passed ? '✅ multi-file logic OK' : '❌ multi-file logic failed');
+  
+      self.postMessage({
+        type: 'response',
+        message: {
+          test: 'vfs-multi-file-test',
+          entry,
+          before,
+          after,
+          status: passed ? 'ok' : 'fail',
+        },
+      });
+    } catch (error) {
+      postLog(`❌ vfs-multi-file-test error: ${error.message}`);
+      self.postMessage({
+        type: 'error',
+        message: `vfs-multi-file-test failed: ${error.message}`,
+      });
+    }
+  }
+
+  if (data === 'vfs-file-test') {
+    postLog('💻 vfs-file-test start');
+    try {
+      // defaultMap と env の初期化
+      const defaultMap = await safeCreateDefaultMap(3);
+      postLog(`📦 defaultMap size: ${defaultMap.size}`);
+  
+      const system = vfs.createSystem(defaultMap);
+      const compilerOptions = {
+        target: ts.ScriptTarget.ES2022,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        allowArbitraryExtensions: true,
+        allowJs: true,
+        checkJs: true,
+        strict: true,
+      };
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+  
+      postLog('🧠 env created');
+      // ファイル作成: 型エラーを意図的に含める (semantic diagnostics を確認するため)
+      const filePath = 'hello.ts';
+      const initialText = `// test\nconst x: number = "this-is-a-string";\n`;
+      env.createFile(filePath, initialText);
+      postLog(`📝 created ${filePath}`);
+  
+      // 診断取得 (semantic)
+      const diags = env.languageService.getSemanticDiagnostics(filePath);
+      postLog(`🔍 diagnostics count after create: ${diags.length}`);
+  
+      // updateFile で修正(オプション: 正常化して診断が0になることも検証可能)
+      const fixedText = `// test\nconst x: number = 123;\n`;
+      env.updateFile(filePath, fixedText);
+      postLog(`✏️ updated ${filePath}`);
+  
+      const diagsAfter = env.languageService.getSemanticDiagnostics(filePath);
+      postLog(`🔍 diagnostics count after update: ${diagsAfter.length}`);
+  
+      // レスポンス: 診断数などを返す
+      self.postMessage({
+        type: 'response',
+        message: {
+          status: 'ok',
+          file: filePath,
+          diagnosticsCountBefore: diags.length,
+          diagnosticsCountAfter: diagsAfter.length,
+        },
+      });
+      postLog('📤 vfs-file-test response sent');
+    } catch (error) {
+      postLog(`❌ vfs-file-test error: ${error.message}`);
+      self.postMessage({ type: 'error', message: error.message });
+    }
+  }
+  
+  if (data === 'vfs-env-test') {
+    postLog('💻 vfs-env-test start');
+    try {
+      const defaultMap = await safeCreateDefaultMap(3);
+
+      const system = vfs.createSystem(defaultMap);
+      const compilerOptions = {
+        target: ts.ScriptTarget.ES2022, // 生成するJSのバージョンを指定。'ES2015'以上でないとプライベート識別子(#)などでエラー
+        moduleResolution: ts.ModuleResolutionKind.Bundler, // URLベースのimportなど、モダンなモジュール解決を許可する
+        allowArbitraryExtensions: true, // .js や .ts 以外の拡張子を持つファイルをインポートできるようにする
+        allowJs: true, // .js ファイルのコンパイルを許可する
+        checkJs: true, // .js ファイルに対しても型チェックを行う (JSDocと連携)
+        strict: true, // すべての厳格な型チェックオプションを有効にする (noImplicitAnyなどを含む)
+        noUnusedLocals: true, // 未使用のローカル変数をエラーとして報告する
+        noUnusedParameters: true, // 未使用の関数パラメータをエラーとして報告する
+      };
+      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+      
+       // ファイル作成
+      env.createFile('hello.ts', 'const x: number = "string";');
+      // 構文解析
+      const diagnostics = env.languageService.getSemanticDiagnostics('hello.ts');
+      // テスト結果を返す
+      
+      // name, sys, languageService, getSourceFile, createFile, updateFile, deleteFile
+      postLog(`🧠 env keys: ${Object.keys(env).join(', ')}`);
+      
+
+      // テスト結果を返す
+      self.postMessage({
+        type: 'response',
+        message: {
+          status: 'ok',
+          diagnosticsCount: diagnostics.length,
+        },
+      });
+    } catch (error) {
+      postLog(`❌ vfs-env-test error: ${error.message}`);
+      self.postMessage({ type: 'error', message: error.message });
+    }
+  }
+
+
+  if (data === 'vfs-init') {
+    postLog('💻 vfs-init start');
+
+    try {
+      const defaultMap = await safeCreateDefaultMap(3);
+      // Safari 対策: postMessage 直後の GC 回避
+      setTimeout(() => {
+        try {
+          self.postMessage({type: 'response', message: 'return'});
+          postLog('📤 vfs-init response sent (delayed)');
+        } catch (error) {
+          postLog(`⚠️ vfs-init postMessage failed: ${error.message}`);
+        }
+      }, 50);
+    } catch (error) {
+      postLog(`❌ vfs-init error: ${error.message}`);
+      self.postMessage({type: 'error', message: error.message});
+    }
+  }
+
+  if (data === 'ping') {
+    postLog('📡 Received: ping');
+    self.postMessage({type: 'response', message: 'pong'});
+  }
+
+  if (data === 'shutdown') {
+    postLog('👋 Worker shutting down...');
+    self.postMessage({type: 'response', message: 'shutdown-complete'});
+    // ログ送信を少し待つ
+    setTimeout(() => self.close(), 100);
   }
 });
 
 // ready 通知
 self.postMessage({type: 'ready'});
-// ready notification (keeps compatibility with test harness)
-self.postMessage({ type: 'ready' });
