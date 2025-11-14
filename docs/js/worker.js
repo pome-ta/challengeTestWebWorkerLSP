@@ -204,5 +204,7 @@ self.addEventListener('message', async (ev) => {
   }
 });
 
+// ready 通知
+self.postMessage({type: 'ready'});
 // ready notification (keeps compatibility with test harness)
 self.postMessage({ type: 'ready' });
