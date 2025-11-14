@@ -26,6 +26,14 @@ async function safeCreateDefaultMap(
       const timeout = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs)
       );
+      
+      postLog(`😇 cmcount: ${attempt}`);
+      if (attempt === 1){
+        await sleep(12000);
+      }
+      
+      
+      
 
       const defaultMap = await Promise.race([
         vfs.createDefaultMapFromCDN(
