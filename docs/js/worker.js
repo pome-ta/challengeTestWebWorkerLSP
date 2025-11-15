@@ -27,12 +27,14 @@ async function safeCreateDefaultMap(
         setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs)
       );
       
+      const timeout2 = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('timeout')), 20)
+      );
+      
       postLog(`😇 cmcount: ${attempt}`);
       if (attempt === 1){
-        await sleep(12000);
+        //await sleep(12000);
       }
-      
-      
       
 
       const defaultMap = await Promise.race([
@@ -45,7 +47,8 @@ async function safeCreateDefaultMap(
           false,
           ts
         ),
-        timeout,
+        //timeout,
+        attempt === 1 ? timeout2 : timeout,
       ]);
 
       postLog(`📦 defaultMap size: ${defaultMap.size}`);
