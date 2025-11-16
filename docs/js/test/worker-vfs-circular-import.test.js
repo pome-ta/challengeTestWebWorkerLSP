@@ -16,7 +16,7 @@ const liItem = document.createElement('li');
     worker.postMessage('vfs-circular-import-test');
 
     const result = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('No response')), 20000);
+      const timer = setTimeout(() => reject(new Error('No response')), 15000);
       worker.addEventListener('message', (event) => {
         const { type, message } = event.data;
         if (type === 'response' && message?.test === 'vfs-circular-import-test') {

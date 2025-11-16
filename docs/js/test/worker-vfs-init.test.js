@@ -21,7 +21,7 @@ let textContent;
     const message = await new Promise((resolve, reject) => {
       const timer = setTimeout(
         () => reject(new Error('No vfs-init response')),
-        20000
+        15000
       );
       worker.addEventListener('message', (event) => {
         const {type, message} = event.data;
