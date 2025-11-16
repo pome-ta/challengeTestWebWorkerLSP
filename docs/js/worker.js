@@ -21,19 +21,22 @@ async function safeCreateDefaultMap(
 
   for (let attempt = 1; attempt <= retryCount; attempt++) {
     postLog(`🔄 VFS init attempt ${attempt}/${retryCount}`);
+    
+    
+    // ★ 追加:テスト用遅延(現象再現のため)
+      // テストの時だけ true になるフラグを使うのが安全
+      if (self.__TEST_DELAY_VFS__ && attempt === 1) {
+        postLog(`♾️ TEST_DELAY_VFS: ${attempt}`);
+        await sleep(1000);
+      }
+
 
     try {
       const timeout = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs)
       );
       
-      // ★ 追加:テスト用遅延(現象再現のため)
-      // テストの時だけ true になるフラグを使うのが安全
-      if (self.__TEST_DELAY_VFS__ && attempt === 1) {
-        postLog(`♾️ TEST_DELAY_VFS: ${attempt}`);
-        await sleep(12000);
-      }
-
+      
       const defaultMap = await Promise.race([
         vfs.createDefaultMapFromCDN(
           {
@@ -435,7 +438,7 @@ self.addEventListener('message', async (event) => {
     postLog('💻 vfs-init start');
 
     try {
-      const defaultMap = await safeCreateDefaultMap(3);
+      const defaultMap = await safeCreateDefaultMap(5);
       // Safari 対策: postMessage 直後の GC 回避
       setTimeout(() => {
         try {
