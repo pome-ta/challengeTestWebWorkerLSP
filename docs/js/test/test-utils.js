@@ -5,6 +5,7 @@ export const createTestWorker = (path) => {
   
   // vfs 遅延テスト
   worker.postMessage({ type: "__injectTestDelay", value: true });
+  //worker.postMessage({ type: "__injectTestDelay", value: false });
 
   worker.addEventListener('message', (event) => {
     const {data} = event;

@@ -18,7 +18,7 @@ const liItem = document.createElement('li');
     worker.postMessage('vfs-file-test');
 
     const result = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('No vfs-file-test response')), 15000);
+      const timer = setTimeout(() => reject(new Error('No vfs-file-test response')), 20000);
       worker.addEventListener('message', (event) => {
         const { type, message } = event.data;
         if (type === 'response' && message?.status === 'ok') {

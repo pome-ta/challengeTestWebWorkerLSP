@@ -17,7 +17,7 @@ let textContent;
     const worker = createTestWorker('./js/worker.js');
 
     const message = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('Worker timeout')), 2000);
+      const timer = setTimeout(() => reject(new Error('Worker timeout')), 20000);
 
       worker.addEventListener('message', (event) => {
         const {type} = event.data;
