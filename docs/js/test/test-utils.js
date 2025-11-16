@@ -2,6 +2,9 @@
 
 export const createTestWorker = (path) => {
   const worker = new Worker(path, {type: 'module'});
+  
+  // vfs 遅延テスト
+  worker.postMessage({ type: "__injectTestDelay", value: true });
 
   worker.addEventListener('message', (event) => {
     const {data} = event;

@@ -27,15 +27,12 @@ async function safeCreateDefaultMap(
         setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs)
       );
       
-      const timeout2 = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), 20)
-      );
-      
-      postLog(`😇 cmcount: ${attempt}`);
-      if (attempt === 1){
-        //await sleep(12000);
+      // ★ 追加:テスト用遅延(現象再現のため)
+      // テストの時だけ true になるフラグを使うのが安全
+      if (self.__TEST_DELAY_VFS__ && attempt === 1) {
+        postLog(`♾️ TEST_DELAY_VFS: ${attempt}`);
+        await sleep(12000);
       }
-      
 
       const defaultMap = await Promise.race([
         vfs.createDefaultMapFromCDN(
@@ -47,8 +44,7 @@ async function safeCreateDefaultMap(
           false,
           ts
         ),
-        //timeout,
-        attempt === 1 ? timeout2 : timeout,
+        timeout,
       ]);
 
       postLog(`📦 defaultMap size: ${defaultMap.size}`);
@@ -74,6 +70,14 @@ async function safeCreateDefaultMap(
 
   throw lastError || new Error('VFS init failed after retries');
 }
+
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === '__injectTestDelay') {
+    self.__TEST_DELAY_VFS__ = event.data.value;
+  }
+});
+
 
 self.addEventListener('message', async (event) => {
   const {data} = event;
