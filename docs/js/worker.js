@@ -32,8 +32,9 @@ async function safeCreateDefaultMap(
       // テストの時だけ true になるフラグを使うのが安全
       if (self.__TEST_DELAY_VFS__ && attempt === 1) {
         await sleep(15000);
+        postLog(`♾️ TEST_DELAY_VFS: ${attempt}`);
       }
-      postLog(`♾️ TEST_DELAY_VFS: ${attempt}`);
+      
       
       const defaultMap = await Promise.race([
         vfs.createDefaultMapFromCDN(
