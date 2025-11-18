@@ -29,11 +29,13 @@ const liItem = document.createElement('li');
     expect(result.status).to.equal('ok');
     expect(result.count).to.be.greaterThan(0);
     textContent = `✅ Worker vfs-circular-import-test passed (${result.count} diagnostics)`;
+    console.log(textContent);
   } catch (error) {
     textContent = `❌ Worker vfs-circular-import-test failed: ${error.message}`;
+    console.error(textContent);
   }
 
-  console.log(textContent);
+  
   liItem.textContent = textContent;
   orderedList.appendChild(liItem);
 })();

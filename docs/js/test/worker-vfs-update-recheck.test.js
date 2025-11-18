@@ -29,11 +29,13 @@ const liItem = document.createElement('li');
     expect(result.status).to.equal('ok');
     expect(result.after).to.be.greaterThan(result.before);
     textContent = `✅ Worker vfs-update-recheck-test passed (before:${result.before} → after:${result.after})`;
+    console.log(textContent);
   } catch (error) {
     textContent = `❌ Worker vfs-update-recheck-test failed: ${error.message}`;
+    console.error(textContent);
   }
 
-  console.log(textContent);
+  
   liItem.textContent = textContent;
   orderedList.appendChild(liItem);
 })();
