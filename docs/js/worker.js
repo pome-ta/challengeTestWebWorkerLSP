@@ -87,7 +87,7 @@ self.addEventListener('message', async (event) => {
   if (data === 'vfs-update-recheck-test') {
     postLog('💻 vfs-update-recheck-test start');
     try {
-      const defaultMap = await safeCreateDefaultMap(3);
+      const defaultMap = await safeCreateDefaultMap(5);
       const system = vfs.createSystem(defaultMap);
       const compilerOptions = {
         target: ts.ScriptTarget.ES2022,
@@ -134,7 +134,7 @@ self.addEventListener('message', async (event) => {
   if (data === 'vfs-circular-import-test') {
     postLog('💻 vfs-circular-import-test start');
     try {
-      const defaultMap = await safeCreateDefaultMap(3);
+      const defaultMap = await safeCreateDefaultMap(5);
       const system = vfs.createSystem(defaultMap);
       const compilerOptions = {
         target: ts.ScriptTarget.ES2022,
@@ -173,7 +173,7 @@ self.addEventListener('message', async (event) => {
   if (data === 'vfs-missing-import-test') {
     postLog('💻 vfs-missing-import-test start');
     try {
-      const defaultMap = await safeCreateDefaultMap(3);
+      const defaultMap = await safeCreateDefaultMap(5);
       const system = vfs.createSystem(defaultMap);
       const compilerOptions = {
         target: ts.ScriptTarget.ES2022,
@@ -216,7 +216,7 @@ self.addEventListener('message', async (event) => {
     postLog('💻 vfs-delete-test start');
     try {
       // 1. VFS初期化
-      const defaultMap = await safeCreateDefaultMap(3);
+      const defaultMap = await safeCreateDefaultMap(5);
       const system = vfs.createSystem(defaultMap);
   
       const compilerOptions = {
@@ -281,7 +281,7 @@ self.addEventListener('message', async (event) => {
   if (data === 'vfs-multi-file-test') {
     postLog('💻 vfs-multi-file-test start');
     try {
-      const defaultMap = await safeCreateDefaultMap(3);
+      const defaultMap = await safeCreateDefaultMap(5);
       const system = vfs.createSystem(defaultMap);
   
       // ファイルを system に書くのではなく env 後に createFile で登録する
@@ -339,7 +339,7 @@ self.addEventListener('message', async (event) => {
     postLog('💻 vfs-file-test start');
     try {
       // defaultMap と env の初期化
-      const defaultMap = await safeCreateDefaultMap(3);
+      const defaultMap = await safeCreateDefaultMap(5);
       postLog(`📦 defaultMap size: ${defaultMap.size}`);
   
       const system = vfs.createSystem(defaultMap);
@@ -392,7 +392,7 @@ self.addEventListener('message', async (event) => {
   if (data === 'vfs-env-test') {
     postLog('💻 vfs-env-test start');
     try {
-      const defaultMap = await safeCreateDefaultMap(3);
+      const defaultMap = await safeCreateDefaultMap(5);
 
       const system = vfs.createSystem(defaultMap);
       const compilerOptions = {
