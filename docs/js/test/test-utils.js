@@ -16,9 +16,34 @@ export const createTestWorker = (path) => {
         minute: '2-digit',
         second: '2-digit',
         fractionalSecondDigits: 3,
-      })}|WorkerLog] ${data.message}`
+      })} | WorkerLog] ${data.message}`
     );
   });
 
   return worker;
 };
+
+
+export const waitForWorkerReady = (worker, timeout=3000) => {
+  return new Promise((resolve, reject) => {
+    // 初期化用: ネットワーク取得と15秒遅延を含むため長めに待つ (30s)
+    const timer = setTimeout(() => reject(new Error(`Worker Init Timeout (${timeout})`)), timeout);
+   
+    const handler = (event) => {
+      const { type, message } = event.data || {};
+      if (type === 'response' && message === 'vfs-ready') {
+        clearTimeout(timer);
+        worker.removeEventListener('message', handler);
+        resolve();
+      } else if (type === 'error') {
+        clearTimeout(timer);
+        worker.removeEventListener('message', handler);
+        reject(new Error(message));
+      }
+    };
+
+    worker.addEventListener('message', handler);
+    worker.postMessage('initialize'); // ハンドシェイク開始
+  });
+};
+

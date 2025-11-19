@@ -2,7 +2,7 @@
 // v0.0.1.7
 
 import { expect } from 'chai';
-import { createTestWorker } from './test-utils.js';
+import { createTestWorker, waitForWorkerReady } from './test-utils.js';
 
 console.log('🧩 worker-vfs-update-recheck.test.js loaded');
 
@@ -13,6 +13,12 @@ const liItem = document.createElement('li');
   let textContent;
   try {
     const worker = createTestWorker('./js/worker.js');
+    
+    // Phase 1: 初期化待ち (ここで15秒遅延を吸収)
+    await waitForWorkerReady(worker);
+    console.log('✅ Worker Initialized');
+
+    // Phase 2: テスト実行 (ここでのタイムアウトは短くてOK)
     worker.postMessage('vfs-update-recheck-test');
 
     const result = await new Promise((resolve, reject) => {

@@ -13,6 +13,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 postLog('👷 worker.js loaded');
 
+// global cache: VFSのMapを保持し共用
+let cachedDefaultMap = null;
+
 async function safeCreateDefaultMap(
   retryCount = 3,
   perAttemptTimeoutMs = 5000
@@ -31,7 +34,7 @@ async function safeCreateDefaultMap(
       // ★ 追加:テスト用遅延(現象再現のため)
       // テストの時だけ true になるフラグを使うのが安全
       if (self.__TEST_DELAY_VFS__ && attempt === 1) {
-        await sleep(15000);
+        await sleep(1500);
         postLog(`♾️ TEST_DELAY_VFS: ${attempt}`);
       }
       
@@ -83,13 +86,48 @@ self.addEventListener('message', (event) => {
 
 self.addEventListener('message', async (event) => {
   const {data} = event;
+  
+  // ============================================================
+  // Phase 1: 初期化 (Initialize)
+  // ============================================================
+  if (data === 'initialize') {
+    postLog('🚀 initialize start');
+    try {
+      // すでにキャッシュがあれば再利用
+      // (あるいは再生成も可だが今回は再利用)
+      if (!cachedDefaultMap) {
+        cachedDefaultMap = await safeCreateDefaultMap(3);
+      } else {
+        postLog('📦 Using existing cachedDefaultMap');
+      }
+
+      // 初期化完了通知
+      self.postMessage({ type: 'response', message: 'vfs-ready' });
+      postLog('✅ initialize complete: vfs-ready');
+
+    } catch (error) {
+      postLog(`❌ initialize error: ${error.message}`);
+      self.postMessage({ type: 'error', message: error.message });
+    }
+    return;
+  }
+  
+  // ============================================================
+  // Phase 2: テスト実行 (キャッシュ済みMapを使用)
+  // ============================================================
+  // 共通: まだ初期化されていない場合のガード
+  if (!cachedDefaultMap) {
+    postLog(`❌ Error: Received ${data} but Worker is NOT initialized.${cachedDefaultMap}`);
+    self.postMessage({ type: 'error', message: 'Not initialized. Send "initialize" first.' });
+    return;
+  }
 
 
   if (data === 'vfs-update-recheck-test') {
     postLog('💻 vfs-update-recheck-test start');
     try {
-      const defaultMap = await safeCreateDefaultMap(5);
-      const system = vfs.createSystem(defaultMap);
+      //const defaultMap = await safeCreateDefaultMap(5);
+      const system = vfs.createSystem(cachedDefaultMap);
       const compilerOptions = {
         target: ts.ScriptTarget.ES2022,
         moduleResolution: ts.ModuleResolutionKind.Bundler,
