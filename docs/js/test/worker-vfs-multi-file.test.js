@@ -2,7 +2,7 @@
 // v0.0.1.3
 
 import { expect } from 'chai';
-import { createTestWorker } from './test-utils.js';
+import { createTestWorker, waitForWorkerReady } from './test-utils.js';
 
 console.log('🧩 worker-vfs-multi-file.test.js loaded');
 
@@ -14,6 +14,11 @@ const liItem = document.createElement('li');
 
   try {
     const worker = createTestWorker('./js/worker.js');
+    
+    console.log('🕰️ Worker waitForWorkerReady');
+    await waitForWorkerReady(worker);
+    console.log('✅ Worker Initialized');
+    
     worker.postMessage('vfs-multi-file-test');
 
     const result = await new Promise((resolve, reject) => {

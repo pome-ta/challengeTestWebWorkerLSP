@@ -24,10 +24,9 @@ export const createTestWorker = (path) => {
 };
 
 
-export const waitForWorkerReady = (worker, timeout=3000) => {
+export const waitForWorkerReady = (worker, timeout=30000) => {
   return new Promise((resolve, reject) => {
-    // 初期化用: ネットワーク取得と15秒遅延を含むため長めに待つ (30s)
-    const timer = setTimeout(() => reject(new Error(`Worker Init Timeout (${timeout})`)), timeout);
+    const timer = setTimeout(() => reject(new Error(`Worker Init Timeout (${timeout * 0.001}s)`)), timeout);
    
     const handler = (event) => {
       const { type, message } = event.data || {};

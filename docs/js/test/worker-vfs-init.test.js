@@ -2,7 +2,7 @@
 // v0.0.0.6
 
 import {expect} from 'chai';
-import {createTestWorker} from './test-utils.js';
+import { createTestWorker, waitForWorkerReady } from './test-utils.js';
 
 console.log('🧩 worker-vfs-init.test.js loaded');
 
@@ -15,6 +15,10 @@ let textContent;
 (async () => {
   try {
     const worker = createTestWorker('./js/worker.js');
+    
+    console.log('🕰️ Worker waitForWorkerReady');
+    await waitForWorkerReady(worker);
+    console.log('✅ Worker Initialized');
 
     worker.postMessage('vfs-init');
 

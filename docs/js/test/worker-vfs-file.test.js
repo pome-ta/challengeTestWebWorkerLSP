@@ -2,7 +2,7 @@
 // v0.0.1.2
 
 import { expect } from 'chai';
-import { createTestWorker } from './test-utils.js';
+import { createTestWorker, waitForWorkerReady } from './test-utils.js';
 
 console.log('🧩 worker-vfs-file.test.js loaded');
 
@@ -13,6 +13,10 @@ const liItem = document.createElement('li');
   let textContent;
   try {
     const worker = createTestWorker('./js/worker.js');
+    
+    console.log('🕰️ Worker waitForWorkerReady');
+    await waitForWorkerReady(worker);
+    console.log('✅ Worker Initialized');
 
     // 直接送る (ready待ちは不要だが、準備済みを期待するなら待っても良い)
     worker.postMessage('vfs-file-test');

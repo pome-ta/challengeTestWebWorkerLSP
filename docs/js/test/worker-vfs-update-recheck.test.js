@@ -14,11 +14,12 @@ const liItem = document.createElement('li');
   try {
     const worker = createTestWorker('./js/worker.js');
     
-    // Phase 1: 初期化待ち (ここで15秒遅延を吸収)
+    // Phase 1: 初期化待ち
+    console.log('🕰️ Worker waitForWorkerReady');
     await waitForWorkerReady(worker);
     console.log('✅ Worker Initialized');
 
-    // Phase 2: テスト実行 (ここでのタイムアウトは短くてOK)
+    // Phase 2: テスト実行
     worker.postMessage('vfs-update-recheck-test');
 
     const result = await new Promise((resolve, reject) => {

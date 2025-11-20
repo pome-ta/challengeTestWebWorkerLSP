@@ -1,5 +1,5 @@
 // worker.js
-// v0.0.1.7
+// v0.0.1.8
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
@@ -24,7 +24,6 @@ async function safeCreateDefaultMap(
 
   for (let attempt = 1; attempt <= retryCount; attempt++) {
     postLog(`🔄 VFS init attempt ${attempt}/${retryCount}`);
-    
   
     try {
       const timeout = new Promise((_, reject) =>
@@ -34,10 +33,9 @@ async function safeCreateDefaultMap(
       // ★ 追加:テスト用遅延(現象再現のため)
       // テストの時だけ true になるフラグを使うのが安全
       if (self.__TEST_DELAY_VFS__ && attempt === 1) {
-        await sleep(1500);
+        await sleep(15000);
         postLog(`♾️ TEST_DELAY_VFS: ${attempt}`);
       }
-      
       
       const defaultMap = await Promise.race([
         vfs.createDefaultMapFromCDN(
@@ -77,15 +75,17 @@ async function safeCreateDefaultMap(
 }
 
 
-self.addEventListener('message', (event) => {
-  if (event.data?.type === '__injectTestDelay') {
-    self.__TEST_DELAY_VFS__ = event.data.value;
-  }
-});
-
-
+// ============================================================
+// webWorker 処理
+// ============================================================
 self.addEventListener('message', async (event) => {
   const {data} = event;
+  
+  // todo: 遅延検証v0.0.2.x 系では消す
+  if (data?.type === '__injectTestDelay') {
+    self.__TEST_DELAY_VFS__ = data.value;
+    return;
+  }
   
   // ============================================================
   // Phase 1: 初期化 (Initialize)
@@ -96,7 +96,7 @@ self.addEventListener('message', async (event) => {
       // すでにキャッシュがあれば再利用
       // (あるいは再生成も可だが今回は再利用)
       if (!cachedDefaultMap) {
-        cachedDefaultMap = await safeCreateDefaultMap(3);
+        cachedDefaultMap = await safeCreateDefaultMap(5);
       } else {
         postLog('📦 Using existing cachedDefaultMap');
       }
@@ -117,11 +117,11 @@ self.addEventListener('message', async (event) => {
   // ============================================================
   // 共通: まだ初期化されていない場合のガード
   if (!cachedDefaultMap) {
-    postLog(`❌ Error: Received ${data} but Worker is NOT initialized.${cachedDefaultMap}`);
+    postLog(`❌ Error: Received ${data} but Worker is NOT initialized.`);
     self.postMessage({ type: 'error', message: 'Not initialized. Send "initialize" first.' });
     return;
   }
-
+  
 
   if (data === 'vfs-update-recheck-test') {
     postLog('💻 vfs-update-recheck-test start');
@@ -173,8 +173,8 @@ self.addEventListener('message', async (event) => {
   if (data === 'vfs-circular-import-test') {
     postLog('💻 vfs-circular-import-test start');
     try {
-      const defaultMap = await safeCreateDefaultMap(5);
-      const system = vfs.createSystem(defaultMap);
+      //const defaultMap = await safeCreateDefaultMap(5);
+      const system = vfs.createSystem(cachedDefaultMap);
       const compilerOptions = {
         target: ts.ScriptTarget.ES2022,
         moduleResolution: ts.ModuleResolutionKind.Bundler,
@@ -212,8 +212,8 @@ self.addEventListener('message', async (event) => {
   if (data === 'vfs-missing-import-test') {
     postLog('💻 vfs-missing-import-test start');
     try {
-      const defaultMap = await safeCreateDefaultMap(5);
-      const system = vfs.createSystem(defaultMap);
+      //const defaultMap = await safeCreateDefaultMap(5);
+      const system = vfs.createSystem(cachedDefaultMap);
       const compilerOptions = {
         target: ts.ScriptTarget.ES2022,
         moduleResolution: ts.ModuleResolutionKind.Bundler,
@@ -255,8 +255,8 @@ self.addEventListener('message', async (event) => {
     postLog('💻 vfs-delete-test start');
     try {
       // 1. VFS初期化
-      const defaultMap = await safeCreateDefaultMap(5);
-      const system = vfs.createSystem(defaultMap);
+      //const defaultMap = await safeCreateDefaultMap(5);
+      const system = vfs.createSystem(cachedDefaultMap);
   
       const compilerOptions = {
         target: ts.ScriptTarget.ES2022,
@@ -320,8 +320,8 @@ self.addEventListener('message', async (event) => {
   if (data === 'vfs-multi-file-test') {
     postLog('💻 vfs-multi-file-test start');
     try {
-      const defaultMap = await safeCreateDefaultMap(5);
-      const system = vfs.createSystem(defaultMap);
+      //const defaultMap = await safeCreateDefaultMap(5);
+      const system = vfs.createSystem(cachedDefaultMap);
   
       // ファイルを system に書くのではなく env 後に createFile で登録する
       const compilerOptions = {
@@ -378,10 +378,10 @@ self.addEventListener('message', async (event) => {
     postLog('💻 vfs-file-test start');
     try {
       // defaultMap と env の初期化
-      const defaultMap = await safeCreateDefaultMap(5);
-      postLog(`📦 defaultMap size: ${defaultMap.size}`);
+      //const defaultMap = await safeCreateDefaultMap(5);
+      postLog(`📦 cachedDefaultMap size: ${cachedDefaultMap.size}`);
   
-      const system = vfs.createSystem(defaultMap);
+      const system = vfs.createSystem(cachedDefaultMap);
       const compilerOptions = {
         target: ts.ScriptTarget.ES2022,
         moduleResolution: ts.ModuleResolutionKind.Bundler,
@@ -431,9 +431,9 @@ self.addEventListener('message', async (event) => {
   if (data === 'vfs-env-test') {
     postLog('💻 vfs-env-test start');
     try {
-      const defaultMap = await safeCreateDefaultMap(5);
-
-      const system = vfs.createSystem(defaultMap);
+      //const defaultMap = await safeCreateDefaultMap(5);
+      const system = vfs.createSystem(cachedDefaultMap);
+      
       const compilerOptions = {
         target: ts.ScriptTarget.ES2022, // 生成するJSのバージョンを指定。'ES2015'以上でないとプライベート識別子(#)などでエラー
         moduleResolution: ts.ModuleResolutionKind.Bundler, // URLベースのimportなど、モダンなモジュール解決を許可する
@@ -475,7 +475,7 @@ self.addEventListener('message', async (event) => {
     postLog('💻 vfs-init start');
 
     try {
-      const defaultMap = await safeCreateDefaultMap(5);
+      //const defaultMap = await safeCreateDefaultMap(5);
       // Safari 対策: postMessage 直後の GC 回避
       setTimeout(() => {
         try {
