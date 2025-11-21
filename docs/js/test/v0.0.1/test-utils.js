@@ -1,4 +1,5 @@
 // test/test-utils.js
+// v0.0.1.
 
 export const createTestWorker = (path) => {
   const worker = new Worker(path, {type: 'module'});
