@@ -13,7 +13,7 @@ const liItem = document.createElement('li');
   let textContent;
   try {
     const worker = createTestWorker('./js/worker.js');
-    console.log('🕰️ Worker waitForWorkerReady');
+
     await waitForWorkerReady(worker);
     console.log('✅ Worker Initialized');
     worker.postMessage('vfs-delete-test');

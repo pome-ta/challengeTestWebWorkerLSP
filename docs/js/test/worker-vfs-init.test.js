@@ -16,7 +16,6 @@ let textContent;
   try {
     const worker = createTestWorker('./js/worker.js');
     
-    console.log('🕰️ Worker waitForWorkerReady');
     await waitForWorkerReady(worker);
     console.log('✅ Worker Initialized');
 

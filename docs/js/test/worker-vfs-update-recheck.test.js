@@ -15,7 +15,6 @@ const liItem = document.createElement('li');
     const worker = createTestWorker('./js/worker.js');
     
     // Phase 1: 初期化待ち
-    console.log('🕰️ Worker waitForWorkerReady');
     await waitForWorkerReady(worker);
     console.log('✅ Worker Initialized');
 
