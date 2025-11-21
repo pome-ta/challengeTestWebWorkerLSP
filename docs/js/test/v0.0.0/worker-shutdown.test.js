@@ -1,4 +1,4 @@
-// test/worker-shutdown.test.js
+// test/v0.0.0/worker-shutdown.test.js
 // v0.0.0.3
 
 import {expect} from 'chai';

@@ -1,4 +1,4 @@
-// test/worker-vfs-init.test.js
+// test/v0.0.1/worker-vfs-init.test.js
 // v0.0.0.6
 
 import {expect} from 'chai';

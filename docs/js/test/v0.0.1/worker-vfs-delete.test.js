@@ -1,4 +1,4 @@
-// test/worker-vfs-delete.test.js
+// test/v0.0.1/worker-vfs-delete.test.js
 // v0.0.1.4
 
 import { expect } from 'chai';

@@ -1,4 +1,4 @@
-// test/worker-init.test.js
+// test/v0.0.0/worker-init.test.js
 // v0.0.0.1
 
 import {expect} from 'chai';

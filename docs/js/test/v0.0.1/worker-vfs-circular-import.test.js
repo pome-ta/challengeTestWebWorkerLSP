@@ -1,4 +1,4 @@
-// test/worker-vfs-circular-import.test.js
+// test/v0.0.1/worker-vfs-circular-import.test.js
 // v0.0.1.6
 
 import { expect } from 'chai';
