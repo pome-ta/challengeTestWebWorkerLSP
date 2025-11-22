@@ -7,7 +7,7 @@ import ts from 'https://esm.sh/typescript';
 const DEBUG = true;
 
 const postLog = (message) => {
-  DEBUG && self.postMessage({type: 'log', message});
+  DEBUG && self.postMessage({ type: 'log', message });
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -24,13 +24,12 @@ async function safeCreateDefaultMap(
 
   for (let attempt = 1; attempt <= retryCount; attempt++) {
     postLog(`🔄 VFS init attempt ${attempt}/${retryCount}`);
-  
+
     try {
       const timeout = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs)
       );
-      
-      
+
       const defaultMap = await Promise.race([
         vfs.createDefaultMapFromCDN(
           {
@@ -68,13 +67,12 @@ async function safeCreateDefaultMap(
   throw lastError || new Error('VFS init failed after retries');
 }
 
-
 // ============================================================
 // webWorker 処理
 // ============================================================
 self.addEventListener('message', async (event) => {
-  const {data} = event;
-  
+  const { data } = event;
+
   // ============================================================
   // Phase 1: 初期化 (Initialize)
   // ============================================================
@@ -92,24 +90,25 @@ self.addEventListener('message', async (event) => {
       // 初期化完了通知
       self.postMessage({ type: 'response', message: 'vfs-ready' });
       postLog('✅ initialize complete: vfs-ready');
-
     } catch (error) {
       postLog(`❌ initialize error: ${error.message}`);
       self.postMessage({ type: 'error', message: error.message });
     }
     return;
   }
-  
+
   // ============================================================
   // Phase 2: テスト実行 (キャッシュ済みMapを使用)
   // ============================================================
   // 共通: まだ初期化されていない場合のガード
   if (!cachedDefaultMap) {
     postLog(`❌ Error: Received ${data} but Worker is NOT initialized.`);
-    self.postMessage({ type: 'error', message: 'Not initialized. Send "initialize" first.' });
+    self.postMessage({
+      type: 'error',
+      message: 'Not initialized. Send "initialize" first.',
+    });
     return;
   }
-  
 
   if (data === 'vfs-update-recheck-test') {
     postLog('💻 vfs-update-recheck-test start');
@@ -120,25 +119,32 @@ self.addEventListener('message', async (event) => {
         moduleResolution: ts.ModuleResolutionKind.Bundler,
         strict: true,
       };
-      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+      const env = vfs.createVirtualTypeScriptEnvironment(
+        system,
+        [],
+        ts,
+        compilerOptions
+      );
       postLog('🧠 env created');
-  
+
       const entry = '/main.ts';
       env.createFile(entry, `const x: number = 1;`);
       postLog('📝 created /main.ts with valid code');
-  
+
       const before = env.languageService.getSemanticDiagnostics(entry).length;
       postLog(`🔍 diagnostics before update: ${before}`);
-  
+
       env.updateFile(entry, `const x: string = 1;`);
       postLog('✏️ updated /main.ts (type mismatch)');
-  
+
       const after = env.languageService.getSemanticDiagnostics(entry).length;
       postLog(`🔍 diagnostics after update: ${after}`);
-  
+
       const passed = before === 0 && after > 0;
-      postLog(passed ? '✅ update-recheck logic OK' : '❌ update-recheck logic failed');
-  
+      postLog(
+        passed ? '✅ update-recheck logic OK' : '❌ update-recheck logic failed'
+      );
+
       self.postMessage({
         type: 'response',
         message: {
@@ -165,25 +171,44 @@ self.addEventListener('message', async (event) => {
         target: ts.ScriptTarget.ES2022,
         moduleResolution: ts.ModuleResolutionKind.Bundler,
       };
-      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+      const env = vfs.createVirtualTypeScriptEnvironment(
+        system,
+        [],
+        ts,
+        compilerOptions
+      );
       postLog('🧠 env created');
-  
+
       // ファイルを相互 import
-      env.createFile('/a.ts', `import { b } from './b'; export const a = b + 1;`);
-      env.createFile('/b.ts', `import { a } from './a'; export const b = a + 1;`);
+      env.createFile(
+        '/a.ts',
+        `import { b } from './b'; export const a = b + 1;`
+      );
+      env.createFile(
+        '/b.ts',
+        `import { a } from './a'; export const b = a + 1;`
+      );
       const entry = '/a.ts';
       postLog('📝 created /a.ts and /b.ts (circular imports)');
-  
+
       const diagnostics = env.languageService.getSemanticDiagnostics(entry);
       const count = diagnostics.length;
       postLog(`🔍 diagnostics count: ${count}`);
-  
+
       const passed = count > 0;
-      postLog(passed ? '✅ circular-import logic OK' : '❌ circular-import logic failed');
-  
+      postLog(
+        passed
+          ? '✅ circular-import logic OK'
+          : '❌ circular-import logic failed'
+      );
+
       self.postMessage({
         type: 'response',
-        message: { test: 'vfs-circular-import-test', count, status: passed ? 'ok' : 'fail' },
+        message: {
+          test: 'vfs-circular-import-test',
+          count,
+          status: passed ? 'ok' : 'fail',
+        },
       });
     } catch (error) {
       postLog(`❌ vfs-circular-import-test error: ${error.message}`);
@@ -194,7 +219,6 @@ self.addEventListener('message', async (event) => {
     }
   }
 
-
   if (data === 'vfs-missing-import-test') {
     postLog('💻 vfs-missing-import-test start');
     try {
@@ -203,27 +227,41 @@ self.addEventListener('message', async (event) => {
         target: ts.ScriptTarget.ES2022,
         moduleResolution: ts.ModuleResolutionKind.Bundler,
       };
-  
+
       const entry = '/main.ts';
-      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+      const env = vfs.createVirtualTypeScriptEnvironment(
+        system,
+        [],
+        ts,
+        compilerOptions
+      );
       postLog('🧠 env created');
-  
+
       // 存在しないファイルを import
-      env.createFile(entry, `import { foo } from './not-exist'; console.log(foo);`);
+      env.createFile(
+        entry,
+        `import { foo } from './not-exist'; console.log(foo);`
+      );
       postLog('📝 created /main.ts with missing import');
-  
+
       const diags = env.languageService.getSemanticDiagnostics(entry);
-      const hasImportError = diags.some(d => d.messageText.includes('Cannot find module'));
-  
+      const hasImportError = diags.some((d) =>
+        d.messageText.includes('Cannot find module')
+      );
+
       postLog(`🔍 diagnostics count: ${diags.length}`);
-      postLog(hasImportError ? '✅ missing-import logic OK' : '❌ missing-import logic failed');
-  
+      postLog(
+        hasImportError
+          ? '✅ missing-import logic OK'
+          : '❌ missing-import logic failed'
+      );
+
       self.postMessage({
         type: 'response',
         message: {
           test: 'vfs-missing-import-test',
           status: hasImportError ? 'ok' : 'fail',
-          diagnostics: diags.map(d => d.messageText),
+          diagnostics: diags.map((d) => d.messageText),
         },
       });
     } catch (error) {
@@ -234,14 +272,13 @@ self.addEventListener('message', async (event) => {
       });
     }
   }
-  
 
   if (data === 'vfs-delete-test') {
     postLog('💻 vfs-delete-test start');
     try {
       // 1. VFS初期化
       const system = vfs.createSystem(cachedDefaultMap);
-  
+
       const compilerOptions = {
         target: ts.ScriptTarget.ES2022,
         moduleResolution: ts.ModuleResolutionKind.Bundler,
@@ -252,34 +289,40 @@ self.addEventListener('message', async (event) => {
         noUnusedLocals: true,
         noUnusedParameters: true,
       };
-  
+
       const entry = '/main.ts';
-      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+      const env = vfs.createVirtualTypeScriptEnvironment(
+        system,
+        [],
+        ts,
+        compilerOptions
+      );
       postLog('🧠 env created');
-  
+
       // 2. ファイル作成
       env.createFile('/a.ts', `export const msg = "hello";`);
       env.createFile(entry, `import { msg } from "./a"; console.log(msg);`);
       postLog('📝 created /a.ts and /main.ts in env');
-  
+
       // 3. 削除前診断
       const before = env.languageService.getSemanticDiagnostics(entry).length;
       postLog(`🔍 diagnostics before: ${before}`);
-  
+
       // 4. ファイル削除
       env.deleteFile('/a.ts');
       postLog('🗑️ deleted /a.ts');
-  
+
       // 5. 削除後診断
-      const diagnosticsAfter = env.languageService.getSemanticDiagnostics(entry);
+      const diagnosticsAfter =
+        env.languageService.getSemanticDiagnostics(entry);
       const after = diagnosticsAfter.length;
       postLog(`🔍 diagnostics after: ${after}`);
-  
+
       // 6. 結果評価
-      const hasImportError = diagnosticsAfter.some(d => d.code === 2307);
+      const hasImportError = diagnosticsAfter.some((d) => d.code === 2307);
       const passed = before === 0 && after > 0 && hasImportError;
       postLog(passed ? '✅ vfs-delete logic OK' : '❌ vfs-delete logic failed');
-  
+
       // 7. 結果送信
       self.postMessage({
         type: 'response',
@@ -305,7 +348,7 @@ self.addEventListener('message', async (event) => {
     postLog('💻 vfs-multi-file-test start');
     try {
       const system = vfs.createSystem(cachedDefaultMap);
-  
+
       // ファイルを system に書くのではなく env 後に createFile で登録する
       const compilerOptions = {
         target: ts.ScriptTarget.ES2022, // 生成するJSのバージョンを指定。'ES2015'以上でないとプライベート識別子(#)などでエラー
@@ -317,27 +360,32 @@ self.addEventListener('message', async (event) => {
         noUnusedLocals: true, // 未使用のローカル変数をエラーとして報告する
         noUnusedParameters: true, // 未使用の関数パラメータをエラーとして報告する
       };
-  
+
       const entry = '/main.ts';
-      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
+      const env = vfs.createVirtualTypeScriptEnvironment(
+        system,
+        [],
+        ts,
+        compilerOptions
+      );
       postLog('🧠 env created');
-  
+
       // env 経由でファイルを追加
       env.createFile('/a.ts', `export const foo = 1;`);
       env.createFile(entry, `import { foo } from './a'; console.log(foo);`);
       postLog('📝 created /a.ts and /main.ts in env');
-  
+
       const before = env.languageService.getSemanticDiagnostics(entry).length;
       postLog(`🔍 diagnostics before: ${before}`);
-  
+
       // ファイル内容を updateFile 経由で壊す(キャッシュが更新される)
       env.updateFile('/a.ts', `// export const foo = 1;`);
       const after = env.languageService.getSemanticDiagnostics(entry).length;
       postLog(`🔍 diagnostics after: ${after}`);
-  
+
       const passed = before === 0 && after > 0;
       postLog(passed ? '✅ multi-file logic OK' : '❌ multi-file logic failed');
-  
+
       self.postMessage({
         type: 'response',
         message: {
@@ -362,7 +410,7 @@ self.addEventListener('message', async (event) => {
     try {
       // defaultMap と env の初期化
       postLog(`📦 cachedDefaultMap size: ${cachedDefaultMap.size}`);
-  
+
       const system = vfs.createSystem(cachedDefaultMap);
       const compilerOptions = {
         target: ts.ScriptTarget.ES2022,
@@ -372,27 +420,32 @@ self.addEventListener('message', async (event) => {
         checkJs: true,
         strict: true,
       };
-      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
-  
+      const env = vfs.createVirtualTypeScriptEnvironment(
+        system,
+        [],
+        ts,
+        compilerOptions
+      );
+
       postLog('🧠 env created');
       // ファイル作成: 型エラーを意図的に含める (semantic diagnostics を確認するため)
       const filePath = 'hello.ts';
       const initialText = `// test\nconst x: number = "this-is-a-string";\n`;
       env.createFile(filePath, initialText);
       postLog(`📝 created ${filePath}`);
-  
+
       // 診断取得 (semantic)
       const diags = env.languageService.getSemanticDiagnostics(filePath);
       postLog(`🔍 diagnostics count after create: ${diags.length}`);
-  
+
       // updateFile で修正(オプション: 正常化して診断が0になることも検証可能)
       const fixedText = `// test\nconst x: number = 123;\n`;
       env.updateFile(filePath, fixedText);
       postLog(`✏️ updated ${filePath}`);
-  
+
       const diagsAfter = env.languageService.getSemanticDiagnostics(filePath);
       postLog(`🔍 diagnostics count after update: ${diagsAfter.length}`);
-  
+
       // レスポンス: 診断数などを返す
       self.postMessage({
         type: 'response',
@@ -409,12 +462,12 @@ self.addEventListener('message', async (event) => {
       self.postMessage({ type: 'error', message: error.message });
     }
   }
-  
+
   if (data === 'vfs-env-test') {
     postLog('💻 vfs-env-test start');
     try {
       const system = vfs.createSystem(cachedDefaultMap);
-      
+
       const compilerOptions = {
         target: ts.ScriptTarget.ES2022, // 生成するJSのバージョンを指定。'ES2015'以上でないとプライベート識別子(#)などでエラー
         moduleResolution: ts.ModuleResolutionKind.Bundler, // URLベースのimportなど、モダンなモジュール解決を許可する
@@ -425,17 +478,22 @@ self.addEventListener('message', async (event) => {
         noUnusedLocals: true, // 未使用のローカル変数をエラーとして報告する
         noUnusedParameters: true, // 未使用の関数パラメータをエラーとして報告する
       };
-      const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, compilerOptions);
-      
-       // ファイル作成
+      const env = vfs.createVirtualTypeScriptEnvironment(
+        system,
+        [],
+        ts,
+        compilerOptions
+      );
+
+      // ファイル作成
       env.createFile('hello.ts', 'const x: number = "string";');
       // 構文解析
-      const diagnostics = env.languageService.getSemanticDiagnostics('hello.ts');
+      const diagnostics =
+        env.languageService.getSemanticDiagnostics('hello.ts');
       // テスト結果を返す
-      
+
       // name, sys, languageService, getSourceFile, createFile, updateFile, deleteFile
       postLog(`🧠 env keys: ${Object.keys(env).join(', ')}`);
-      
 
       // テスト結果を返す
       self.postMessage({
@@ -451,7 +509,6 @@ self.addEventListener('message', async (event) => {
     }
   }
 
-
   if (data === 'vfs-init') {
     postLog('💻 vfs-init start');
 
@@ -459,7 +516,7 @@ self.addEventListener('message', async (event) => {
       // Safari 対策: postMessage 直後の GC 回避
       setTimeout(() => {
         try {
-          self.postMessage({type: 'response', message: 'return'});
+          self.postMessage({ type: 'response', message: 'return' });
           postLog('📤 vfs-init response sent (delayed)');
         } catch (error) {
           postLog(`⚠️ vfs-init postMessage failed: ${error.message}`);
@@ -467,22 +524,22 @@ self.addEventListener('message', async (event) => {
       }, 50);
     } catch (error) {
       postLog(`❌ vfs-init error: ${error.message}`);
-      self.postMessage({type: 'error', message: error.message});
+      self.postMessage({ type: 'error', message: error.message });
     }
   }
 
   if (data === 'ping') {
     postLog('📡 Received: ping');
-    self.postMessage({type: 'response', message: 'pong'});
+    self.postMessage({ type: 'response', message: 'pong' });
   }
 
   if (data === 'shutdown') {
     postLog('👋 Worker shutting down...');
-    self.postMessage({type: 'response', message: 'shutdown-complete'});
+    self.postMessage({ type: 'response', message: 'shutdown-complete' });
     // ログ送信を少し待つ
     setTimeout(() => self.close(), 100);
   }
 });
 
 // ready 通知
-self.postMessage({type: 'ready'});
+self.postMessage({ type: 'ready' });

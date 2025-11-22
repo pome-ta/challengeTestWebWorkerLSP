@@ -2,30 +2,32 @@
 // v0.0.2
 
 export const createTestWorker = (path) => {
-  const worker = new Worker(path, {type: 'module'});
+  const worker = new Worker(path, { type: 'module' });
 
   worker.addEventListener('message', (event) => {
-    const {data} = event;
+    const { data } = event;
     data?.type === 'log' &&
-    console.log(
-      `[${new Date().toLocaleTimeString('ja-JP', {
-        hour12: false,
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        fractionalSecondDigits: 3,
-      })} | WorkerLog] ${data.message}`
-    );
+      console.log(
+        `[${new Date().toLocaleTimeString('ja-JP', {
+          hour12: false,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          fractionalSecondDigits: 3,
+        })} | WorkerLog] ${data.message}`
+      );
   });
 
   return worker;
 };
 
-
-export const waitForWorkerReady = (worker, timeout=30000) => {
+export const waitForWorkerReady = (worker, timeout = 30000) => {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Worker Init Timeout (${timeout * 0.001}s)`)), timeout);
-   
+    const timer = setTimeout(
+      () => reject(new Error(`Worker Init Timeout (${timeout * 0.001}s)`)),
+      timeout
+    );
+
     const handler = (event) => {
       const { type, message } = event.data || {};
       if (type === 'response' && message === 'vfs-ready') {
@@ -43,4 +45,3 @@ export const waitForWorkerReady = (worker, timeout=30000) => {
     worker.postMessage('initialize'); // ハンドシェイク開始
   });
 };
-
