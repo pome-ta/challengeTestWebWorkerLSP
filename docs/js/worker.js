@@ -1,5 +1,5 @@
 // worker.js
-// v0.0.2.1
+// v0.0.2.4
 
 import { postLog, setDebug } from './util/logger.js';
 import { VfsCore } from './core/vfs-core.js';
@@ -19,6 +19,7 @@ const handlers = {
     setTimeout(() => self.close(), 100);
     return 'shutdown-complete';
   },
+  'lsp/initialize': LspCore.initialize,
 };
 
 // ============================================================

@@ -1,4 +1,5 @@
 // core/vfs-core.js
+// v0.0.2.4
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';

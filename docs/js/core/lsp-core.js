@@ -1,5 +1,5 @@
 // core/lsp-core.js
-// v0.0.2.1
+// v0.0.2.4
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
@@ -38,5 +38,22 @@ function initializeEnvironment() {
 }
 
 export const LspCore = {
-  // 今後、ここにLSPのコア機能（didOpen, didChangeなど）を実装します。
+  /**
+   * LSPセッションを初期化します。
+   * @param {object} params - クライアントからの初期化パラメータ
+   * @returns {{capabilities: object}} サーバーの機能
+   */
+  initialize: (params) => {
+    postLog(`Initializing LSP with params: ${JSON.stringify(params)}`);
+
+    // TypeScriptの言語サービス環境を準備します
+    initializeEnvironment();
+
+    // このサーバーが提供できる機能をクライアントに伝えます
+    return {
+      capabilities: {
+        // 今後実装する機能を追加していきます
+      },
+    };
+  },
 };
