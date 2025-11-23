@@ -15,4 +15,8 @@ export const JsonRpcErrorCode = {
 
   // A generic server error for implementation-defined server-errors (-32000 to -32099)
   ServerError: -32000,
+  // LSP specific error codes
+  // @see https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#errorCodes
+  ServerNotInitialized: -32002,
+  UnknownErrorCode: -32001,
 };
