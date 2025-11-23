@@ -2,6 +2,40 @@
 // v0.0.2.1
 
 
+import { postLog } from '../util/logger.js';
+
+export class LspCore {
+  constructor() {
+    this.initialized = false;
+  }
+
+  handleInitialize() {
+    postLog('🔧 LspCore.initialize()');
+    this.initialized = true;
+
+    // ここで LSP initialize response に近い形を返す
+    return {
+      capabilities: {},
+      serverInfo: {
+        name: 'mini-lsp',
+        version: '0.0.2.0'
+      }
+    };
+  }
+
+  handleShutdown() {
+    postLog('🔧 LspCore.shutdown()');
+    this.initialized = false;
+    return true;
+  }
+
+  handlePing() {
+    return 'pong';
+  }
+}
+
+/*
+
 import * as vfsCore from './vfs-core.js';
 
 let cachedDefaultMap = null;
@@ -29,4 +63,4 @@ export function isInitialized() {
 export function getCachedDefaultMap() {
   if (!isInitialized()) throw new Error('Not initialized');
   return cachedDefaultMap;
-}
+}*/
