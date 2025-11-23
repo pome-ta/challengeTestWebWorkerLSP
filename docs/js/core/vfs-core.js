@@ -28,6 +28,11 @@ async function createDefaultMapWithRetries(
       const timeout = new Promise((_, reject) =>
         setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs)
       );
+      if (attempt === 1) {
+
+        await sleep(15000);
+        postLog(`♾️ TEST_DELAY_VFS: ${attempt}`);
+      }
 
       const defaultMap = await Promise.race([
         vfs.createDefaultMapFromCDN(

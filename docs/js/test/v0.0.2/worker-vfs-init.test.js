@@ -27,7 +27,6 @@ const runTests = async () => {
     worker = createTestWorker('./js/worker.js', (log) => logs.push(log));
 
     await waitForWorkerReady(worker);
-    /*
     const readyLog = logs.find((log) => log.includes('Worker loaded and ready'));
     addResult(
       test1Name,
@@ -60,7 +59,7 @@ const runTests = async () => {
       !!cachedLog,
       'Calling vfs/ensureReady again should use the cache.'
     );
-    */
+    
   } catch (error) {
     console.error('❌ Test failed:', error);
     addResult('VFS Init Test Suite', false, error.message);
