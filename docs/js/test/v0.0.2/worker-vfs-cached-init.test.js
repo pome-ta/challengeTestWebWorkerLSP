@@ -9,8 +9,6 @@ import {
   addResult,
 } from './test-utils.js';
 
-
-
 (async () => {
   const testName = 'VFS: vfs/ensureReady should use cache on second call';
   let worker;
