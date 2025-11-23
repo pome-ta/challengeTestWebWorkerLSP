@@ -90,3 +90,21 @@ export const sendRequest = (worker, method, params = {}, timeout = 30000) => {
     worker.postMessage({ jsonrpc: '2.0', id, method, params });
   });
 };
+
+/**
+ * テスト結果をHTMLリストに表示します。
+ * @param {string} name - テスト名
+ * @param {boolean} passed - 合否
+ * @param {string} [details=''] - 詳細メッセージ
+ */
+export const addResult = (name, passed, details = '') => {
+  const resultsList = document.getElementById('testOrdered');
+  if (!resultsList) return;
+
+  const li = document.createElement('li');
+  const status = passed ? '✅' : '❌';
+  const message = passed ? details || 'Passed' : details;
+  li.textContent = `${status} ${name}: ${message}`;
+  li.style.color = passed ? 'green' : 'red';
+  resultsList.appendChild(li);
+};
