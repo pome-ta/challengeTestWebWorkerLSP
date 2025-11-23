@@ -8,6 +8,8 @@ import {
   addResult,
 } from './test-utils.js';
 
+console.log('🧩 worker-ready.test loaded');
+
 (async () => {
   const testName = 'Worker: should send worker/ready notification on startup';
   let worker;

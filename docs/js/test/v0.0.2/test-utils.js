@@ -26,6 +26,9 @@ export const createTestWorker = (path, onLog) => {
     }
   });
 
+  // テスト環境では、デフォルトでデバッグログを有効にする
+  worker.postMessage('debug:on');
+
   return worker;
 };
 

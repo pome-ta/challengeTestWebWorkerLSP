@@ -3,6 +3,7 @@
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
+
 import { postLog } from '../util/logger.js';
 import { VfsCore } from './vfs-core.js';
 
@@ -34,15 +35,6 @@ function initializeEnvironment() {
     defaultCompilerOptions
   );
   postLog('🧠 VFS environment created');
-}
-
-/**
- * LSP関連の処理を実行する前に、VFSの準備ができていることを確認します。
- */
-function ensureVfsReady() {
-  if (!VfsCore.isReady()) {
-    throw new Error('VFS not ready. Call `vfs/ensureReady` first.');
-  }
 }
 
 export const LspCore = {

@@ -9,6 +9,8 @@ import {
   addResult,
 } from './test-utils.js';
 
+console.log('🧩 worker-vfs-init.test.js loaded');
+
 (async () => {
   const testName =
     'VFS: vfs/ensureReady should initialize the VFS on first call';

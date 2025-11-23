@@ -1,9 +1,9 @@
 // core/vfs-core.js
-// v0.0.2.1
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
-import { postLog, sleep } from '../util/logger.js';
+import { postLog } from '../util/logger.js';
+import { sleep } from '../util/async-utils.js';
 
 // design.md: VFSのMapを保持し共用
 let cachedDefaultMap = null;

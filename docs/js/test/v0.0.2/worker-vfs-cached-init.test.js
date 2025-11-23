@@ -9,6 +9,8 @@ import {
   addResult,
 } from './test-utils.js';
 
+console.log('🧩 worker-vfs-cached-init.test.js loaded');
+
 (async () => {
   const testName = 'VFS: vfs/ensureReady should use cache on second call';
   let worker;
@@ -21,7 +23,9 @@ import {
 
     logs = []; // ログをリセットして2回目の呼び出しをテスト
     await sendRequest(worker, 'vfs/ensureReady'); // 2回目の呼び出し
-    const cachedLog = logs.find((log) => log.includes('Using existing cachedDefaultMap'));
+    const cachedLog = logs.find((log) =>
+      log.includes('Using existing cachedDefaultMap')
+    );
     expect(cachedLog).to.exist;
     addResult(testName, true);
   } catch (error) {
