@@ -1,8 +1,8 @@
 // test/v0.0.0/worker-shutdown.test.js
 // v0.0.0.3
 
-import {expect} from 'chai';
-import {createTestWorker} from './test-utils.js';
+import { expect } from 'chai';
+import { createTestWorker } from './test-utils.js';
 
 console.log('🧩 worker-shutdown.test.js loaded');
 
@@ -14,7 +14,7 @@ let textContent;
 // --- テスト開始 ---
 (async () => {
   try {
-    const worker = createTestWorker('./js/worker.js');
+    const worker = createTestWorker('../../js/worker.js');
 
     // まず ready を待つ
     await new Promise((resolve, reject) => {
@@ -23,7 +23,7 @@ let textContent;
         2000
       );
       worker.addEventListener('message', (event) => {
-        const {type} = event.data;
+        const { type } = event.data;
         if (type === 'ready') {
           clearTimeout(timer);
           resolve();
@@ -41,7 +41,7 @@ let textContent;
         2000
       );
       worker.addEventListener('message', (event) => {
-        const {type, message} = event.data;
+        const { type, message } = event.data;
         if (type === 'response' && message === 'shutdown-complete') {
           clearTimeout(timer);
           resolve(message);

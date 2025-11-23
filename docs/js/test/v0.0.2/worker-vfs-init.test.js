@@ -7,7 +7,6 @@ import {
   sendRequest,
 } from './test-utils.js';
 
-
 const resultsList = document.getElementById('testOrdered');
 
 const addResult = (name, passed, details = '') => {
@@ -26,7 +25,7 @@ const runTests = async () => {
     const test1Name = 'Worker Ready Handshake';
     let logs = [];
     worker = createTestWorker('../../js/worker.js', (log) => logs.push(log));
-    
+
     await waitForWorkerReady(worker);
     /*
     const readyLog = logs.find((log) => log.includes('Worker loaded and ready'));

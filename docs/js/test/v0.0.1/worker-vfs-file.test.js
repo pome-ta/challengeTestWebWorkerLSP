@@ -12,8 +12,8 @@ const liItem = document.createElement('li');
 (async () => {
   let textContent;
   try {
-    const worker = createTestWorker('./js/worker.js');
-    
+    const worker = createTestWorker('../../js/worker.js');
+
     await waitForWorkerReady(worker);
     console.log('✅ Worker Initialized');
 
@@ -21,7 +21,10 @@ const liItem = document.createElement('li');
     worker.postMessage('vfs-file-test');
 
     const result = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('No vfs-file-test response')), 15000);
+      const timer = setTimeout(
+        () => reject(new Error('No vfs-file-test response')),
+        15000
+      );
       worker.addEventListener('message', (event) => {
         const { type, message } = event.data;
         if (type === 'response' && message?.status === 'ok') {
@@ -49,4 +52,3 @@ const liItem = document.createElement('li');
   liItem.textContent = textContent;
   orderedList.appendChild(liItem);
 })();
-

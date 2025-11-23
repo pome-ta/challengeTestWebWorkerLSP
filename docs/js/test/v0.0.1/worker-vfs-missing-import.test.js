@@ -12,18 +12,21 @@ const liItem = document.createElement('li');
 (async () => {
   let textContent;
   try {
-    const worker = createTestWorker('./js/worker.js');
-    
+    const worker = createTestWorker('../../js/worker.js');
+
     await waitForWorkerReady(worker);
     console.log('✅ Worker Initialized');
-    
+
     worker.postMessage('vfs-missing-import-test');
 
     const result = await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('No response')), 15000);
       worker.addEventListener('message', (event) => {
         const { type, message } = event.data;
-        if (type === 'response' && message?.test === 'vfs-missing-import-test') {
+        if (
+          type === 'response' &&
+          message?.test === 'vfs-missing-import-test'
+        ) {
           clearTimeout(timer);
           resolve(message);
         }

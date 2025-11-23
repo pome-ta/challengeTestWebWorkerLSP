@@ -1,8 +1,8 @@
 // test/v0.0.0/worker-ping.test.js
 // v0.0.0.2
 
-import {expect} from 'chai';
-import {createTestWorker} from './test-utils.js';
+import { expect } from 'chai';
+import { createTestWorker } from './test-utils.js';
 
 console.log('🧩 worker-ping.test.js loaded');
 
@@ -14,7 +14,7 @@ let textContent;
 // --- テスト開始 ---
 (async () => {
   try {
-    const worker = createTestWorker('./js/worker.js');
+    const worker = createTestWorker('../../js/worker.js');
 
     // Worker の初期化完了を待機
     await new Promise((resolve, reject) => {
@@ -24,7 +24,7 @@ let textContent;
       );
 
       worker.addEventListener('message', (event) => {
-        const {type} = event.data;
+        const { type } = event.data;
         if (type === 'ready') {
           clearTimeout(timer);
           resolve();
@@ -44,7 +44,7 @@ let textContent;
       );
 
       worker.addEventListener('message', (event) => {
-        const {type, message} = event.data;
+        const { type, message } = event.data;
         if (type === 'response' && message === 'pong') {
           clearTimeout(timer);
           resolve(message);

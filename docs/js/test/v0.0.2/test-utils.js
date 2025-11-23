@@ -66,7 +66,10 @@ export const sendRequest = (worker, method, params = {}, timeout = 30000) => {
   const id = ++requestId;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
-      () => reject(new Error(`Request timeout for method: ${method} (${timeout}ms)`)),
+      () =>
+        reject(
+          new Error(`Request timeout for method: ${method} (${timeout}ms)`)
+        ),
       timeout
     );
 

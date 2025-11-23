@@ -13,11 +13,11 @@ const liItem = document.createElement('li');
   let textContent;
 
   try {
-    const worker = createTestWorker('./js/worker.js');
-    
+    const worker = createTestWorker('../../js/worker.js');
+
     await waitForWorkerReady(worker);
     console.log('✅ Worker Initialized');
-    
+
     worker.postMessage('vfs-multi-file-test');
 
     const result = await new Promise((resolve, reject) => {
@@ -44,7 +44,6 @@ const liItem = document.createElement('li');
     textContent = `❌ Worker vfs-multi-file-test failed: ${error.message}`;
     console.error(textContent);
   }
-
 
   liItem.textContent = textContent;
   orderedList.appendChild(liItem);

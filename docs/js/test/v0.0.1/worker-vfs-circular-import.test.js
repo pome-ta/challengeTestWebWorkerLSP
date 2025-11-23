@@ -12,7 +12,7 @@ const liItem = document.createElement('li');
 (async () => {
   let textContent;
   try {
-    const worker = createTestWorker('./js/worker.js');
+    const worker = createTestWorker('../../js/worker.js');
 
     await waitForWorkerReady(worker);
     console.log('✅ Worker Initialized');
@@ -22,7 +22,10 @@ const liItem = document.createElement('li');
       const timer = setTimeout(() => reject(new Error('No response')), 15000);
       worker.addEventListener('message', (event) => {
         const { type, message } = event.data;
-        if (type === 'response' && message?.test === 'vfs-circular-import-test') {
+        if (
+          type === 'response' &&
+          message?.test === 'vfs-circular-import-test'
+        ) {
           clearTimeout(timer);
           resolve(message);
         }
@@ -38,7 +41,6 @@ const liItem = document.createElement('li');
     console.error(textContent);
   }
 
-  
   liItem.textContent = textContent;
   orderedList.appendChild(liItem);
 })();
