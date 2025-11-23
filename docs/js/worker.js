@@ -1,5 +1,5 @@
 // worker.js
-// v0.0.2.0
+// v0.0.2.1
 
 import { postLog } from './util/logger.js';
 import { VfsCore } from './core/vfs-core.js';
