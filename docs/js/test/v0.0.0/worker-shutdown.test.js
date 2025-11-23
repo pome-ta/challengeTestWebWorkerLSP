@@ -14,7 +14,7 @@ let textContent;
 // --- テスト開始 ---
 (async () => {
   try {
-    const worker = createTestWorker('../../js/worker.js');
+    const worker = createTestWorker('./js/worker.js');
 
     // まず ready を待つ
     await new Promise((resolve, reject) => {

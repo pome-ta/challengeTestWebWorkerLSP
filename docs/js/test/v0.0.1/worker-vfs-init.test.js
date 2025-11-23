@@ -14,7 +14,7 @@ let textContent;
 // --- テスト開始 ---
 (async () => {
   try {
-    const worker = createTestWorker('../../js/worker.js');
+    const worker = createTestWorker('./js/worker.js');
 
     await waitForWorkerReady(worker);
     console.log('✅ Worker Initialized');

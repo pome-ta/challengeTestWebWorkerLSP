@@ -24,7 +24,7 @@ const runTests = async () => {
     // --- Test 1: Worker Ready Handshake ---
     const test1Name = 'Worker Ready Handshake';
     let logs = [];
-    worker = createTestWorker('../../js/worker.js', (log) => logs.push(log));
+    worker = createTestWorker('./js/worker.js', (log) => logs.push(log));
 
     await waitForWorkerReady(worker);
     /*

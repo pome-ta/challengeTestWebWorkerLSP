@@ -14,7 +14,7 @@ let textContent;
 // --- テスト開始 ---
 (async () => {
   try {
-    const worker = createTestWorker('../../js/worker.js');
+    const worker = createTestWorker('./js/worker.js');
 
     // Worker の初期化完了を待機
     await new Promise((resolve, reject) => {

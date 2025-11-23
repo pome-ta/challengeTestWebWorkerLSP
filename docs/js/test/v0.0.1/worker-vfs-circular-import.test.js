@@ -12,7 +12,7 @@ const liItem = document.createElement('li');
 (async () => {
   let textContent;
   try {
-    const worker = createTestWorker('../../js/worker.js');
+    const worker = createTestWorker('./js/worker.js');
 
     await waitForWorkerReady(worker);
     console.log('✅ Worker Initialized');
