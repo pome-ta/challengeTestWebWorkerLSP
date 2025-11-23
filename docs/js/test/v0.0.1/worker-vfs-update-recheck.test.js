@@ -12,7 +12,7 @@ const liItem = document.createElement('li');
 (async () => {
   let textContent;
   try {
-    const worker = createTestWorker('../../js/worker.js');
+    const worker = createTestWorker('./js/worker.js');
 
     // Phase 1: 初期化待ち
     await waitForWorkerReady(worker);
