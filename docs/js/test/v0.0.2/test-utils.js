@@ -95,6 +95,48 @@ export const sendRequest = (worker, method, params = {}, timeout = 30000) => {
 };
 
 /**
+ * WorkerにJSON-RPC通知を送信します。レスポンスは待ちません。
+ * @param {Worker} worker
+ * @param {string} method
+ * @param {object} params
+ */
+export const sendNotification = (worker, method, params = {}) => {
+  worker.postMessage({ jsonrpc: '2.0', method, params });
+};
+
+/**
+ * Workerから特定のメソッドの通知が送信されるのを待ちます。
+ * @param {Worker} worker
+ * @param {string} expectedMethod - 待機する通知のメソッド名
+ * @param {number} timeout
+ * @returns {Promise<any>} 通知の `params` オブジェクト
+ */
+export const waitForNotification = (worker, expectedMethod, timeout = 5000) => {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () =>
+        reject(
+          new Error(
+            `Timeout waiting for notification: ${expectedMethod} (${timeout}ms)`
+          )
+        ),
+      timeout
+    );
+
+    const handler = (event) => {
+      const notification = event.data;
+      if (notification?.method === expectedMethod) {
+        clearTimeout(timer);
+        worker.removeEventListener('message', handler);
+        resolve(notification.params);
+      }
+    };
+
+    worker.addEventListener('message', handler);
+  });
+};
+
+/**
  * テスト結果をHTMLリストに表示します。
  * @param {string} name - テスト名
  * @param {boolean} passed - 合否

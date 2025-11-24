@@ -37,6 +37,36 @@ function initializeEnvironment() {
   postLog('🧠 VFS environment created');
 }
 
+/**
+ * 指定されたファイルの診断情報（エラーなど）を取得し、クライアントに通知します。
+ * @param {string} uri - ファイルのURI
+ */
+function publishDiagnostics(uri) {
+  if (!env) return;
+
+  const path = uri.replace('file://', '');
+  const syntacticDiagnostics = env.getSyntacticDiagnostics(path);
+  const semanticDiagnostics = env.getSemanticDiagnostics(path);
+
+  // 診断情報をLSPフォーマットに変換
+  const diagnostics = [...syntacticDiagnostics, ...semanticDiagnostics].map(
+    (diag) => {
+      return {
+        range: {}, // 簡単のため、今回はrangeを空にする
+        severity: diag.category + 1, // ts.DiagnosticCategory to LSP DiagnosticSeverity
+        source: 'ts',
+        message: typeof diag.messageText === 'string' ? diag.messageText : diag.messageText.messageText,
+      };
+    }
+  );
+
+  self.postMessage({
+    jsonrpc: '2.0',
+    method: 'textDocument/publishDiagnostics',
+    params: { uri, diagnostics },
+  });
+}
+
 export const LspCore = {
   /**
    * LSPセッションを初期化します。
@@ -59,5 +89,21 @@ export const LspCore = {
         version: '0.0.2',
       },
     };
+  },
+
+  /**
+   * ドキュメントが開かれたときの通知を処理します。
+   * @param {{textDocument: {uri: string, text: string}}} params
+   */
+  didOpen: (params) => {
+    const { uri, text } = params.textDocument;
+    const path = uri.replace('file://', '');
+    postLog(`📄 didOpen: ${path}`);
+
+    // VFSにファイルを作成
+    env.createFile(path, text);
+
+    // 診断情報をクライアントに送信
+    publishDiagnostics(uri);
   },
 };

@@ -20,6 +20,8 @@ const handlers = {
     return 'shutdown-complete';
   },
   'lsp/initialize': LspCore.initialize,
+  // LSP Document Synchronization
+  'textDocument/didOpen': LspCore.didOpen,
 };
 
 // ============================================================
