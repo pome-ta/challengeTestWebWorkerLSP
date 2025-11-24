@@ -45,8 +45,8 @@ function publishDiagnostics(uri) {
   if (!env) return;
 
   const path = uri.replace('file://', '');
-  const syntacticDiagnostics = env.getSyntacticDiagnostics(path);
-  const semanticDiagnostics = env.getSemanticDiagnostics(path);
+  const syntacticDiagnostics = env.languageService.getSyntacticDiagnostics(path);
+  const semanticDiagnostics = env.languageService.getSemanticDiagnostics(path);
 
   // 診断情報をLSPフォーマットに変換
   const diagnostics = [...syntacticDiagnostics, ...semanticDiagnostics].map(
@@ -99,10 +99,13 @@ export const LspCore = {
     const { uri, text } = params.textDocument;
     const path = uri.replace('file://', '');
     postLog(`📄 didOpen: ${path}`);
-
+    
+    if (!env) {
+      return;
+    }
     // VFSにファイルを作成
     env.createFile(path, text);
-
+    
     // 診断情報をクライアントに送信
     publishDiagnostics(uri);
   },
