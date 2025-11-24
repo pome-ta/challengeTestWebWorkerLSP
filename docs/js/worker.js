@@ -59,7 +59,11 @@ async function handleJsonRpc({ id, method, params }) {
     const message = `Unknown method: ${method}`;
     postLog(`Error: ${message}`);
     if (id) {
-      self.postMessage({ jsonrpc: '2.0', id, error: { code: JsonRpcErrorCode.MethodNotFound, message } });
+      self.postMessage({
+        jsonrpc: '2.0',
+        id,
+        error: { code: JsonRpcErrorCode.MethodNotFound, message },
+      });
     }
     return;
   }
@@ -74,13 +78,21 @@ async function handleJsonRpc({ id, method, params }) {
     }
     postLog(`Finished: ${method}`);
     if (id) {
-      self.postMessage({ jsonrpc: '2.0', id, result: result !== undefined ? result : null });
+      self.postMessage({
+        jsonrpc: '2.0',
+        id,
+        result: result !== undefined ? result : null,
+      });
     }
   } catch (error) {
     const message = `${method} failed: ${error.message}`;
     postLog(`Error: ${message}`);
     if (id) {
-      self.postMessage({ jsonrpc: '2.0', id, error: { code: JsonRpcErrorCode.ServerError, message } });
+      self.postMessage({
+        jsonrpc: '2.0',
+        id,
+        error: { code: JsonRpcErrorCode.ServerError, message },
+      });
     }
   }
 }
