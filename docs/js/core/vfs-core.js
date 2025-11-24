@@ -142,7 +142,7 @@ export function createEnvironment(compilerOptions = {}, rootFiles = []) {
   const system = vfs.createSystem(cachedDefaultMap);
   const defaultOptions = getDefaultCompilerOptions();
   const opts = Object.assign({}, defaultOptions, compilerOptions);
-  const rootPaths = rootFiles.map((uri) => uri.replace('file://', ''));
+  const rootPaths = rootFiles.map((uri) => uri.replace(/^file:\/\//, ''));
   const env = vfs.createVirtualTypeScriptEnvironment(system, rootPaths, ts, opts);
   postLog('🧠 VFS environment created (via createEnvironment)');
   return env;
