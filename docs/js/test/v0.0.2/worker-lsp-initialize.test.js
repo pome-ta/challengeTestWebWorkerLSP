@@ -36,6 +36,11 @@ console.log('🧩 worker-lsp-initialize.test.js loaded');
     expect(result).to.be.an('object');
     expect(result).to.have.property('capabilities');
     expect(result.capabilities).to.be.an('object');
+    
+    // serverInfoの存在と構造をチェックする
+    expect(result).to.have.property('serverInfo');
+    expect(result.serverInfo).to.be.an('object');
+    expect(result.serverInfo).to.have.property('name').and.to.be.a('string');
 
     addResult(testName, true);
   } catch (error) {

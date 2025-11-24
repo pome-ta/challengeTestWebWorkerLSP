@@ -54,6 +54,10 @@ export const LspCore = {
       capabilities: {
         // 今後実装する機能を追加していきます
       },
+      serverInfo: {
+        name: 'WebWorker-LSP-Server',
+        version: '0.0.2',
+      },
     };
   },
 };
