@@ -12,7 +12,8 @@ import {
 console.log('🧩 worker-lsp-initialize.test.js loaded');
 
 (async () => {
-  const testName = 'LSP: should handle initialize request and return capabilities';
+  const testName =
+    'LSP: should handle initialize request and return capabilities';
   let worker;
 
   try {
@@ -30,13 +31,17 @@ console.log('🧩 worker-lsp-initialize.test.js loaded');
       rootUri: 'file:///app/',
       capabilities: {}, // クライアントの機能 (今回は空でOK)
     };
-    const result = await sendRequest(worker, 'lsp/initialize', initializeParams);
+    const result = await sendRequest(
+      worker,
+      'lsp/initialize',
+      initializeParams
+    );
 
     // 4. Workerからのレスポンスに `capabilities` が含まれていることを確認する
     expect(result).to.be.an('object');
     expect(result).to.have.property('capabilities');
     expect(result.capabilities).to.be.an('object');
-    
+
     // serverInfoの存在と構造をチェックする
     expect(result).to.have.property('serverInfo');
     expect(result.serverInfo).to.be.an('object');

@@ -6,24 +6,25 @@ import { VfsCore } from './core/vfs-core.js';
 import { JsonRpcErrorCode } from './core/error-codes.js';
 import { LspCore } from './core/lsp-core.js';
 
-// ============================================================
-// JSON-RPC Method Handlers
-// ============================================================
+// テスト環境でのデバッグしやすさを考慮し、デフォルトでデバッグログを有効にする
+setDebug(true);
+
+// handler マップは "method" -> async function(params)
 const handlers = {
   // VFS
-  'vfs/ensureReady': VfsCore.ensureReady,
+  'vfs/ensureReady': async (params) => await VfsCore.ensureReady(),
   // LSP Lifecycle
-  'lsp/ping': () => 'pong',
-  'lsp/shutdown': () => {
+  'lsp/ping': async () => 'pong',
+  'lsp/shutdown': async () => {
     postLog('Worker shutting down...');
     setTimeout(() => self.close(), 100);
     return 'shutdown-complete';
   },
-  'lsp/initialize': LspCore.initialize,
-  // LSP Document Synchronization
-  'textDocument/didOpen': LspCore.didOpen,
-  'textDocument/didChange': LspCore.didChange,
-  'textDocument/didClose': LspCore.didClose,
+  'lsp/initialize': async (params) => await LspCore.initialize(params),
+  // Document sync (VFS 必須)
+  'textDocument/didOpen': async (params) => await LspCore.didOpen(params),
+  'textDocument/didChange': async (params) => await LspCore.didChange(params),
+  'textDocument/didClose': async (params) => await LspCore.didClose(params),
 };
 
 // ============================================================
@@ -34,13 +35,28 @@ const handlers = {
  * JSON-RPCリクエストを処理します。
  * @param {object} data - JSON-RPCメッセージオブジェクト
  */
-async function handleJsonRpc({ id, method, params }) {
-  postLog(`Received: ${method} (id: ${id})`);
+async function handleJsonRpcMessage(msg) {
+  const { jsonrpc, id, method, params } = msg || {};
+  if (jsonrpc !== '2.0' || typeof method !== 'string') {
+    // invalid request
+    if (id) {
+      self.postMessage({
+        jsonrpc: '2.0',
+        id,
+        error: {
+          code: JsonRpcErrorCode.InvalidRequest,
+          message: 'Invalid JSON-RPC 2.0 payload',
+        },
+      });
+    }
+    return;
+  }
 
-  // ガード節: VFSの準備が必要なLSPメソッドが、準備完了前に呼び出された場合は早期にエラーを返す
+  postLog(`Received: ${method} (id:${id ?? '-'})`);
+
+  // VFS 必要メソッド判定: lsp/* と textDocument/* は VFS 前提とする
   const requiresVfs =
-    method.startsWith('lsp/') && !['lsp/ping', 'lsp/shutdown'].includes(method);
-
+    method.startsWith('lsp/') || method.startsWith('textDocument/');
   if (requiresVfs && !VfsCore.isReady()) {
     const message = 'VFS not ready. Call `vfs/ensureReady` first.';
     postLog(`Error: ${message}`);
@@ -69,14 +85,9 @@ async function handleJsonRpc({ id, method, params }) {
   }
 
   try {
-    let result;
-    // ensureReadyは引数を取らないので特別扱いする
-    if (method === 'vfs/ensureReady') {
-      result = await handler();
-    } else {
-      result = await handler(params);
-    }
+    const result = await handler(params);
     postLog(`Finished: ${method}`);
+    // request only: id present -> send response
     if (id) {
       self.postMessage({
         jsonrpc: '2.0',
@@ -84,8 +95,9 @@ async function handleJsonRpc({ id, method, params }) {
         result: result !== undefined ? result : null,
       });
     }
-  } catch (error) {
-    const message = `${method} failed: ${error.message}`;
+    // notification: id absent -> nothing to send
+  } catch (err) {
+    const message = `${method} failed: ${err?.message ?? String(err)}`;
     postLog(`Error: ${message}`);
     if (id) {
       self.postMessage({
@@ -102,16 +114,17 @@ self.addEventListener('message', async (event) => {
   if (typeof data === 'string' && data.startsWith('debug:')) {
     const enabled = data === 'debug:on';
     setDebug(enabled);
-    postLog(`Debug mode set to: ${enabled}`);
-    return; // このメッセージはここで処理完了
+    postLog(`Debug mode set ${enabled}`);
+    return;
   }
 
   // JSON-RPCリクエストを処理
   if (data?.jsonrpc === '2.0') {
-    await handleJsonRpc(data);
+    await handleJsonRpcMessage(data);
     return;
   }
 
+  // 既存の非-jsonrpc メッセージ (互換性)
   postLog(`Received unknown message format: ${JSON.stringify(data)}`);
 });
 

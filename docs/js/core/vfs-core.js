@@ -87,7 +87,10 @@ async function createDefaultMapWithRetries(
  * @returns {Promise<void>}
  */
 export async function ensureReady(retry = 3, timeoutMs = 5000) {
-  if (vfsReady && cachedDefaultMap) return;
+  if (vfsReady && cachedDefaultMap) {
+    postLog('📦 Using existing cachedDefaultMap (already ready)');
+    return;
+  }
   if (_ensurePromise) return _ensurePromise;
 
   _ensurePromise = (async () => {
@@ -116,24 +119,31 @@ export function getDefaultMap() {
   return cachedDefaultMap;
 }
 
-/**
- * 新しい VirtualTypeScriptEnvironment を生成して返す。
- * - 呼び出し前に ensureReady() を呼ぶこと。
- * @param {object} compilerOptions - optional
- * @returns {import('@typescript/vfs').VirtualTypeScriptEnvironment}
- */
-export function createEnvironment(compilerOptions = {}) {
-  if (!cachedDefaultMap) {
-    throw new Error('VFS not initialized. Call ensureReady() first.');
-  }
-  const system = vfs.createSystem(cachedDefaultMap);
+function getDefaultCompilerOptions() {
   const defaultOptions = {
     target: ts.ScriptTarget.ES2022,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     strict: true,
   };
+  return defaultOptions;
+}
+
+/**
+ * 新しい VirtualTypeScriptEnvironment を生成して返す。
+ * - 呼び出し前に ensureReady() を呼ぶこと。
+ * @param {object} compilerOptions - optional
+ * @param {string[]} rootFiles - プロジェクトのルートファイルパスの配列
+ * @returns {import('@typescript/vfs').VirtualTypeScriptEnvironment}
+ */
+export function createEnvironment(compilerOptions = {}, rootFiles = []) {
+  if (!cachedDefaultMap) {
+    throw new Error('VFS not initialized. Call ensureReady() first.');
+  }
+  const system = vfs.createSystem(cachedDefaultMap);
+  const defaultOptions = getDefaultCompilerOptions();
   const opts = Object.assign({}, defaultOptions, compilerOptions);
-  const env = vfs.createVirtualTypeScriptEnvironment(system, [], ts, opts);
+  const rootPaths = rootFiles.map((uri) => uri.replace('file://', ''));
+  const env = vfs.createVirtualTypeScriptEnvironment(system, rootPaths, ts, opts);
   postLog('🧠 VFS environment created (via createEnvironment)');
   return env;
 }
@@ -156,5 +166,6 @@ export const VfsCore = {
   isReady: () => vfsReady,
   getDefaultMap,
   createEnvironment,
+  getDefaultCompilerOptions,
   resetForTest,
 };

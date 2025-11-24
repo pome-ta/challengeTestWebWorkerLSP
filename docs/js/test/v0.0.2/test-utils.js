@@ -12,17 +12,13 @@ export const createTestWorker = (path, onLog) => {
   const worker = new Worker(path, { type: 'module' });
 
   worker.addEventListener('message', (event) => {
-    const { method, params } = event.data || {};
-    if (method === 'worker/log' && params?.message) {
-      const logMessage = `[${new Date().toLocaleTimeString('ja-JP', {
-        hour12: false,
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        fractionalSecondDigits: 3,
-      })} | WorkerLog] ${params.message}`;
-      console.log(logMessage);
-      onLog?.(logMessage);
+    const data = event.data || {};
+    if (data?.method === 'worker/log' && data.params?.message) {
+      const formatted = `[${
+        data.params.timestamp ?? new Date().toISOString()
+      } | WorkerLog] ${data.params.message}`;
+      console.log(formatted);
+      onLog?.(formatted);
     }
   });
 
@@ -68,13 +64,10 @@ export const waitForWorkerReady = (worker, timeout = 5000) => {
 export const sendRequest = (worker, method, params = {}, timeout = 30000) => {
   const id = ++requestId;
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(
-      () =>
-        reject(
-          new Error(`Request timeout for method: ${method} (${timeout}ms)`)
-        ),
-      timeout
-    );
+    const timer = setTimeout(() => {
+      worker.removeEventListener('message', handler);
+      reject(new Error(`Request timeout for method: ${method} (${timeout}ms)`));
+    }, timeout);
 
     const handler = (event) => {
       const response = event.data;
@@ -82,7 +75,9 @@ export const sendRequest = (worker, method, params = {}, timeout = 30000) => {
         clearTimeout(timer);
         worker.removeEventListener('message', handler);
         if (response.error) {
-          reject(new Error(response.error.message));
+          reject(
+            new Error(response.error.message || JSON.stringify(response.error))
+          );
         } else {
           resolve(response.result);
         }
@@ -121,13 +116,20 @@ export const waitForNotification = (
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
       () =>
-        reject(new Error(`Timeout waiting for notification: ${expectedMethod} (${timeout}ms)`)),
+        reject(
+          new Error(
+            `Timeout waiting for notification: ${expectedMethod} (${timeout}ms)`
+          )
+        ),
       timeout
     );
 
     const handler = (event) => {
       const notification = event.data;
-      if (notification?.method === expectedMethod && paramsMatcher(notification.params)) {
+      if (
+        notification?.method === expectedMethod &&
+        paramsMatcher(notification.params)
+      ) {
         clearTimeout(timer);
         worker.removeEventListener('message', handler);
         resolve(notification.params);

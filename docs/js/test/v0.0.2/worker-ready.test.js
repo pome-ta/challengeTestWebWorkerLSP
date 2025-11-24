@@ -19,7 +19,7 @@ console.log('🧩 worker-ready.test loaded');
     worker = createTestWorker('./js/worker.js', (log) => logs.push(log));
     await waitForWorkerReady(worker);
     const readyLog = logs.find((log) =>
-      log.includes('Worker loaded and ready')
+      log.includes('[Worker] Worker loaded and ready')
     );
     expect(readyLog).to.exist;
     addResult(testName, true);

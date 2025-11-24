@@ -18,6 +18,7 @@ import { VfsCore } from './vfs-core.js';
 
 let env = null;
 const knownFiles = new Map(); // uri -> {path, version}
+let compilerOptions = {};
 
 /**
  * 内部: 簡潔に env を用意する（ensureReady を含む）。
@@ -26,6 +27,7 @@ async function ensureEnvReady(compilerOptions = {}) {
   if (env) return env;
   // VFS が準備されていることを保証
   await VfsCore.ensureReady();
+  compilerOptions = VfsCore.getDefaultCompilerOptions();
   env = VfsCore.createEnvironment(compilerOptions);
   return env;
 }
@@ -123,6 +125,7 @@ function publishDiagnostics(uri) {
  */
 export const LspCore = {
   initialize: async (params = {}) => {
+    compilerOptions = params.initializationOptions?.compilerOptions || {};
     postLog(`LSP initialize params: ${JSON.stringify(params)}`);
 
     // VFS の準備と env の初期化を待つ
@@ -157,11 +160,18 @@ export const LspCore = {
         env.updateFile(path, text);
         knownFiles.set(uri, { path, version });
       } else {
+        // 新規なら create
         env.createFile(path, text);
         knownFiles.set(uri, { path, version });
       }
 
-      publishDiagnostics(uri);
+      // envにプロジェクトの全体像を教える
+      // これがマルチファイル解決の鍵
+      env.setCompilerOptions({ ...compilerOptions, rootFiles: Array.from(knownFiles.keys()).map(u => u.replace('file://', '')) });
+
+      // 診断を実行
+      publishDiagnostics(uri); // まずは開いたファイル自身を診断
+
       return { success: true };
     } catch (error) {
       postLog(`❌ didOpen error: ${error?.message ?? String(error)}`);
@@ -196,7 +206,11 @@ export const LspCore = {
         knownFiles.set(uri, { path, version });
       }
 
+      // ファイル内容が変わったので、プロジェクトの定義を再認識させる
+      env.setCompilerOptions({ ...compilerOptions, rootFiles: Array.from(knownFiles.keys()).map(u => u.replace('file://', '')) });
+
       publishDiagnostics(uri);
+
       return { success: true };
     } catch (error) {
       postLog(`❌ didChange error: ${error?.message ?? String(error)}`);
@@ -213,8 +227,14 @@ export const LspCore = {
       const { uri } = params.textDocument;
       const path = uri.replace('file://', '');
       postLog(`📕 didClose ${path}`);
-      // 簡易動作: knownFiles から削除するだけ（env 側で deleteFile しても良い）
+
       knownFiles.delete(uri);
+
+      // プロジェクトのファイル構成が変わったので、定義を再認識させる
+      if (env) { // envが一度も作られていない場合は不要
+        env.setCompilerOptions({ ...compilerOptions, rootFiles: Array.from(knownFiles.keys()).map(u => u.replace('file://', '')) });
+      }
+
       // publish empty diagnostics to clear issues
       self.postMessage({
         jsonrpc: '2.0',
