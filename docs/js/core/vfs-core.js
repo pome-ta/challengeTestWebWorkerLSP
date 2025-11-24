@@ -1,32 +1,21 @@
 // core/vfs-core.js
 // v0.0.2.6
+// 変更点要約:
+// - createEnvironment に `initialFiles` 引数を追加 (path -> text オブジェクト)
+// - createEnvironment は system に先にファイルを書き込んでから createVirtualTypeScriptEnvironment を呼ぶ
+// - getDefaultCompilerOptions をエクスポート (Lsp 側で利用)
+// - ensureReady は並列呼び出しに安全
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
 import { postLog } from '../util/logger.js';
 import { sleep } from '../util/async-utils.js';
 
-/*
-  変更点（要旨）
-  - cachedDefaultMap をモジュールスコープで持つが、ensureReady は並行呼び出しに耐えるように単一の Promise を返す。
-  - createEnvironment() を追加して、LSP 側が簡潔に env を作れるようにする（責務の分離）。
-  - エラーハンドリングを丁寧に（fetch系は即失敗、timeout はリトライ）。
-*/
-
 let cachedDefaultMap = null;
 let vfsReady = false;
 let _ensurePromise = null;
 
-/**
- * CDNからTypeScriptのdefault libを取得しMapを作成する（リトライ付き）。
- * @param {number} retryCount
- * @param {number} perAttemptTimeoutMs
- * @returns {Promise<Map<string,string>>}
- */
-async function createDefaultMapWithRetries(
-  retryCount = 3,
-  perAttemptTimeoutMs = 5000
-) {
+async function createDefaultMapWithRetries(retryCount = 3, perAttemptTimeoutMs = 5000) {
   let lastError = null;
 
   for (let attempt = 1; attempt <= retryCount; attempt++) {
@@ -53,28 +42,16 @@ async function createDefaultMapWithRetries(
       return defaultMap;
     } catch (error) {
       lastError = error;
-      // ネットワーク系は再試行しない（fetch 系は環境依存で致命的なことが多い）
-      if (
-        error &&
-        error.message &&
-        (error.message.includes('fetch') ||
-          error.message.includes('NetworkError'))
-      ) {
+      if (error && error.message && (error.message.includes('fetch') || error.message.includes('NetworkError'))) {
         postLog(`🚫 Network error (give up): ${error.message}`);
         throw error;
       }
-      // タイムアウト等はリトライ
       if (error && error.message && error.message.includes('timeout')) {
-        postLog(`⏰ Timeout on attempt ${attempt}, will retry after backoff`);
-        await sleep(1000 * attempt); // backoff: 1s, 2s, ...
+        postLog(`⏰ Timeout on attempt ${attempt}, retry after backoff`);
+        await sleep(1000 * attempt);
         continue;
       }
-      // その他のエラーは上位に投げる
-      postLog(
-        `❌ createDefaultMapWithRetries unknown error: ${
-          error?.message ?? String(error)
-        }`
-      );
+      postLog(`❌ createDefaultMapWithRetries unknown error: ${error?.message ?? String(error)}`);
       throw error;
     }
   }
@@ -82,10 +59,6 @@ async function createDefaultMapWithRetries(
   throw lastError || new Error('VFS init failed after retries');
 }
 
-/**
- * VFS を準備する。複数呼び出しが同時来ても createDefaultMap は一度だけ実行される。
- * @returns {Promise<void>}
- */
 export async function ensureReady(retry = 3, timeoutMs = 5000) {
   if (vfsReady && cachedDefaultMap) {
     postLog('📦 Using existing cachedDefaultMap (already ready)');
@@ -103,7 +76,6 @@ export async function ensureReady(retry = 3, timeoutMs = 5000) {
       vfsReady = true;
       postLog('✅ VFS ensureReady complete');
     } finally {
-      // resolve したら _ensurePromise はクリア（次回は再取得可能）
       _ensurePromise = null;
     }
   })();
@@ -111,46 +83,85 @@ export async function ensureReady(retry = 3, timeoutMs = 5000) {
   return _ensurePromise;
 }
 
-/**
- * VFS の defaultMap を返す（読み取り専用）。
- * @returns {Map<string,string>|null}
- */
 export function getDefaultMap() {
   return cachedDefaultMap;
 }
 
-function getDefaultCompilerOptions() {
-  const defaultOptions = {
+export function getDefaultCompilerOptions() {
+  return {
     target: ts.ScriptTarget.ES2022,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     strict: true,
   };
-  return defaultOptions;
 }
 
 /**
- * 新しい VirtualTypeScriptEnvironment を生成して返す。
- * - 呼び出し前に ensureReady() を呼ぶこと。
- * @param {object} compilerOptions - optional
- * @param {string[]} rootFiles - プロジェクトのルートファイルパスの配列
- * @returns {import('@typescript/vfs').VirtualTypeScriptEnvironment}
+ * createEnvironment の改良点:
+ * - rootFiles: array of absolute paths (like '/file1.ts')
+ * - initialFiles: object { '/file1.ts': 'content', '/file2.ts': '...' }
+ *   -> createEnvironment は system に先にファイルを書き込む (write/create)
  */
-export function createEnvironment(compilerOptions = {}, rootFiles = []) {
+export function createEnvironment(compilerOptions = {}, rootFiles = [], initialFiles = {}) {
   if (!cachedDefaultMap) {
     throw new Error('VFS not initialized. Call ensureReady() first.');
   }
+
+  // create system from cached default map
   const system = vfs.createSystem(cachedDefaultMap);
+
+  // ensure initial files are present in the system BEFORE creating the environment
+  // initialFiles keys may be absolute paths or URIs; normalize to absolute path (no file://)
+  for (const [key, content] of Object.entries(initialFiles || {})) {
+    const path = String(key).replace(/^file:\/\//, '');
+    // Use system.writeFile if available, otherwise vfs helpers via env later
+    try {
+      if (typeof system.writeFile === 'function') {
+        system.writeFile(path, content);
+      } else {
+        // fallback: set in the map (cachedDefaultMap is a Map but system may have setFile)
+        // createSystem provides a 'writeFile' normally; this fallback is defensive.
+        postLog(`⚠️ system.writeFile not available for ${path}, skipping direct write`);
+      }
+    } catch (e) {
+      postLog(`⚠️ Failed to write initial file ${path} into system: ${e?.message ?? String(e)}`);
+    }
+  }
+
+  // normalize root paths (strip file:// if any)
+  const rootPaths = (rootFiles || []).map((r) => String(r).replace(/^file:\/\//, ''));
+
   const defaultOptions = getDefaultCompilerOptions();
   const opts = Object.assign({}, defaultOptions, compilerOptions);
-  const rootPaths = rootFiles.map((uri) => uri.replace(/^file:\/\//, ''));
+
   const env = vfs.createVirtualTypeScriptEnvironment(system, rootPaths, ts, opts);
-  postLog('🧠 VFS environment created (via createEnvironment)');
+  postLog(`🧠 VFS environment created (via createEnvironment); roots: [${rootPaths.join(', ')}]`);
+
+  // After env creation, ensure that environment's files have content matching initialFiles
+  // (some vfs implementations may not pick up system.writeFile into env source file content)
+  for (const [key, content] of Object.entries(initialFiles || {})) {
+    const path = String(key).replace(/^file:\/\//, '');
+    try {
+      // If env has file, update it; else create it.
+      if (env.getSourceFile && env.getSourceFile(path)) {
+        env.updateFile(path, content);
+      } else {
+        env.createFile(path, content);
+      }
+    } catch (e) {
+      postLog(`⚠️ createEnvironment sync file apply failed for ${path}: ${e?.message ?? String(e)}`);
+    }
+  }
+
+  // prime the language service program
+  try {
+    env.languageService.getProgram();
+  } catch (e) {
+    postLog(`⚠️ getProgram() failed right after env creation: ${e?.message ?? String(e)}`);
+  }
+
   return env;
 }
 
-/**
- * テスト/デバッグ用: cache をリセットする。
- */
 export function resetForTest() {
   cachedDefaultMap = null;
   vfsReady = false;
@@ -158,9 +169,6 @@ export function resetForTest() {
   postLog('♻️ VfsCore resetForTest() called');
 }
 
-/**
- * 現状の状態を返す
- */
 export const VfsCore = {
   ensureReady,
   isReady: () => vfsReady,
