@@ -8,6 +8,7 @@ import { postLog } from '../util/logger.js';
 import { VfsCore } from './vfs-core.js';
 
 let env = null;
+const knownFiles = new Set(); // VFSに存在するファイルのURIを管理する
 
 const defaultCompilerOptions = {
   target: ts.ScriptTarget.ES2022,
@@ -19,10 +20,7 @@ const defaultCompilerOptions = {
  * VFS環境を初期化または再利用します。
  */
 function initializeEnvironment() {
-  if (env) {
-    postLog('🧠 Reusing existing VFS environment');
-    return;
-  }
+  if (env) return; // 一度だけ初期化する
   const defaultMap = VfsCore.getDefaultMap();
   if (!defaultMap) {
     throw new Error('VFS is not initialized. Cannot create LSP environment.');
@@ -30,7 +28,7 @@ function initializeEnvironment() {
   const system = vfs.createSystem(defaultMap);
   env = vfs.createVirtualTypeScriptEnvironment(
     system,
-    [],
+    [], // ルートファイルは空で開始し、動的に追加する
     ts,
     defaultCompilerOptions
   );
@@ -101,12 +99,19 @@ export const LspCore = {
     postLog(`📄 didOpen: ${path}`);
     
     if (!env) {
-      return;
+      throw new Error('LSP environment not initialized. Call `lsp/initialize` first.');
     }
-    // VFSにファイルを作成
-    env.createFile(path, text);
-    
-    // 診断情報をクライアントに送信
+
+    // v0.0.1の成功事例に倣い、createFile/updateFileを使い分ける
+    if (knownFiles.has(uri)) {
+      env.updateFile(path, text);
+    } else {
+      env.createFile(path, text);
+      knownFiles.add(uri);
+    }
+
+    // didOpenされたファイル自身のエラーをチェックして通知する
+    // 関連ファイルのエラーは、didChangeなどで別途ハンドリングする
     publishDiagnostics(uri);
   },
 };

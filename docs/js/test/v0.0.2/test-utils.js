@@ -108,24 +108,26 @@ export const sendNotification = (worker, method, params = {}) => {
  * Workerから特定のメソッドの通知が送信されるのを待ちます。
  * @param {Worker} worker
  * @param {string} expectedMethod - 待機する通知のメソッド名
+ * @param {(params: any) => boolean} [paramsMatcher] - 通知のparamsが期待通りか判定する関数
  * @param {number} timeout
  * @returns {Promise<any>} 通知の `params` オブジェクト
  */
-export const waitForNotification = (worker, expectedMethod, timeout = 5000) => {
+export const waitForNotification = (
+  worker,
+  expectedMethod,
+  paramsMatcher = () => true, // デフォルトでは常にtrueを返す
+  timeout = 5000
+) => {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
       () =>
-        reject(
-          new Error(
-            `Timeout waiting for notification: ${expectedMethod} (${timeout}ms)`
-          )
-        ),
+        reject(new Error(`Timeout waiting for notification: ${expectedMethod} (${timeout}ms)`)),
       timeout
     );
 
     const handler = (event) => {
       const notification = event.data;
-      if (notification?.method === expectedMethod) {
+      if (notification?.method === expectedMethod && paramsMatcher(notification.params)) {
         clearTimeout(timer);
         worker.removeEventListener('message', handler);
         resolve(notification.params);
