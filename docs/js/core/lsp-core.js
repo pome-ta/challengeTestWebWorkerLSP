@@ -167,7 +167,7 @@ export const LspCore = {
 
       // envにプロジェクトの全体像を教える
       // これがマルチファイル解決の鍵
-      env.setCompilerOptions({ ...compilerOptions, rootFiles: Array.from(knownFiles.keys()).map(u => u.replace('file://', '')) });
+      env.updateCompilerOptions({ ...compilerOptions, rootFiles: Array.from(knownFiles.keys()).map(u => u.replace('file://', '')) });
 
       // 診断を実行
       publishDiagnostics(uri); // まずは開いたファイル自身を診断
@@ -207,7 +207,7 @@ export const LspCore = {
       }
 
       // ファイル内容が変わったので、プロジェクトの定義を再認識させる
-      env.setCompilerOptions({ ...compilerOptions, rootFiles: Array.from(knownFiles.keys()).map(u => u.replace('file://', '')) });
+      env.updateCompilerOptions({ ...compilerOptions, rootFiles: Array.from(knownFiles.keys()).map(u => u.replace('file://', '')) });
 
       publishDiagnostics(uri);
 
@@ -232,7 +232,7 @@ export const LspCore = {
 
       // プロジェクトのファイル構成が変わったので、定義を再認識させる
       if (env) { // envが一度も作られていない場合は不要
-        env.setCompilerOptions({ ...compilerOptions, rootFiles: Array.from(knownFiles.keys()).map(u => u.replace('file://', '')) });
+        env.updateCompilerOptions({ ...compilerOptions, rootFiles: Array.from(knownFiles.keys()).map(u => u.replace('file://', '')) });
       }
 
       // publish empty diagnostics to clear issues
