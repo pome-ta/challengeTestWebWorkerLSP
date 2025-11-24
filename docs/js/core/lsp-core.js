@@ -1,5 +1,5 @@
 // core/lsp-core.js
-// v0.0.2.4
+// v0.0.2.6
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
@@ -7,56 +7,108 @@ import ts from 'https://esm.sh/typescript';
 import { postLog } from '../util/logger.js';
 import { VfsCore } from './vfs-core.js';
 
-let env = null;
-const knownFiles = new Set(); // VFSに存在するファイルのURIを管理する
+/*
+  変更点（要旨）
+  - initialize を async にして VfsCore.ensureReady() を待つ
+  - env は VfsCore.createEnvironment() で生成・再利用
+  - didOpen/didChange/didClose を実装（TextDocument 管理の最低限）
+  - publishDiagnostics: TS 診断 -> LSP 診断への変換（位置も計算）
+  - エラーハンドリングと堅牢性を改善
+*/
 
-const defaultCompilerOptions = {
-  target: ts.ScriptTarget.ES2022,
-  moduleResolution: ts.ModuleResolutionKind.Bundler,
-  strict: true,
-};
+let env = null;
+const knownFiles = new Map(); // uri -> {path, version}
 
 /**
- * VFS環境を初期化または再利用します。
+ * 内部: 簡潔に env を用意する（ensureReady を含む）。
  */
-function initializeEnvironment() {
-  if (env) return; // 一度だけ初期化する
-  const defaultMap = VfsCore.getDefaultMap();
-  if (!defaultMap) {
-    throw new Error('VFS is not initialized. Cannot create LSP environment.');
-  }
-  const system = vfs.createSystem(defaultMap);
-  env = vfs.createVirtualTypeScriptEnvironment(
-    system,
-    [], // ルートファイルは空で開始し、動的に追加する
-    ts,
-    defaultCompilerOptions
-  );
-  postLog('🧠 VFS environment created');
+async function ensureEnvReady(compilerOptions = {}) {
+  if (env) return env;
+  // VFS が準備されていることを保証
+  await VfsCore.ensureReady();
+  env = VfsCore.createEnvironment(compilerOptions);
+  return env;
 }
 
 /**
- * 指定されたファイルの診断情報（エラーなど）を取得し、クライアントに通知します。
- * @param {string} uri - ファイルのURI
+ * TypeScript の diagnostic の messageText を文字列化する（chain 対応）。
  */
-function publishDiagnostics(uri) {
-  if (!env) return;
+function diagMessageTextToString(messageText) {
+  if (!messageText) return '';
+  if (typeof messageText === 'string') return messageText;
+  // DiagnosticMessageChain
+  let text = '';
+  let node = messageText;
+  while (node) {
+    text += node.messageText;
+    node = node.next && node.next.length ? node.next[0] : null;
+    if (node) text += '\n';
+  }
+  return text;
+}
 
-  const path = uri.replace('file://', '');
-  const syntacticDiagnostics = env.languageService.getSyntacticDiagnostics(path);
-  const semanticDiagnostics = env.languageService.getSemanticDiagnostics(path);
+/**
+ * TS Diagnostic -> LSP Diagnostic に変換する
+ * @param {import('typescript').Diagnostic} diag
+ * @param {ts.SourceFile | undefined} sourceFile
+ */
+function tsDiagToLsp(diag, sourceFile) {
+  const message = diagMessageTextToString(diag.messageText);
+  let range = {
+    start: { line: 0, character: 0 },
+    end: { line: 0, character: 0 },
+  };
 
-  // 診断情報をLSPフォーマットに変換
-  const diagnostics = [...syntacticDiagnostics, ...semanticDiagnostics].map(
-    (diag) => {
-      return {
-        range: {}, // 簡単のため、今回はrangeを空にする
-        severity: diag.category + 1, // ts.DiagnosticCategory to LSP DiagnosticSeverity
-        source: 'ts',
-        message: typeof diag.messageText === 'string' ? diag.messageText : diag.messageText.messageText,
+  try {
+    if (typeof diag.start === 'number' && sourceFile) {
+      const start = diag.start;
+      const length = typeof diag.length === 'number' ? diag.length : 0;
+      const endPos = start + length;
+
+      const startLC = ts.getLineAndCharacterOfPosition(sourceFile, start);
+      const endLC = ts.getLineAndCharacterOfPosition(
+        sourceFile,
+        Math.max(0, endPos)
+      );
+      range = {
+        start: { line: startLC.line, character: startLC.character },
+        end: { line: endLC.line, character: endLC.character },
       };
     }
-  );
+  } catch (e) {
+    // 位置計算に失敗したらデフォルトの range を使う
+    postLog(`⚠️ range conversion failed: ${e?.message ?? String(e)}`);
+  }
+
+  // LSP severity: 1=Error,2=Warning,3=Information,4=Hint
+  const severity = diag.category != null ? diag.category + 1 : 1;
+
+  return {
+    range,
+    severity,
+    source: 'ts',
+    message,
+    code: diag.code,
+  };
+}
+
+/**
+ * 指定ファイルの診断を計算して、textDocument/publishDiagnostics をポストする。
+ * @param {string} uri
+ */
+function publishDiagnostics(uri) {
+  if (!env) {
+    postLog('⚠️ publishDiagnostics called but env is not initialized');
+    return;
+  }
+  const path = uri.replace('file://', '');
+  const sourceFile = env.getSourceFile ? env.getSourceFile(path) : undefined;
+
+  const syntactic = env.languageService.getSyntacticDiagnostics(path) || [];
+  const semantic = env.languageService.getSemanticDiagnostics(path) || [];
+  const all = [...syntactic, ...semantic];
+
+  const diagnostics = all.map((d) => tsDiagToLsp(d, sourceFile));
 
   self.postMessage({
     jsonrpc: '2.0',
@@ -65,22 +117,21 @@ function publishDiagnostics(uri) {
   });
 }
 
+/**
+ * LSP initialize
+ * @param {object} params
+ */
 export const LspCore = {
-  /**
-   * LSPセッションを初期化します。
-   * @param {object} params - クライアントからの初期化パラメータ
-   * @returns {{capabilities: object}} サーバーの機能
-   */
-  initialize: (params) => {
-    postLog(`Initializing LSP with params: ${JSON.stringify(params)}`);
+  initialize: async (params = {}) => {
+    postLog(`LSP initialize params: ${JSON.stringify(params)}`);
 
-    // TypeScriptの言語サービス環境を準備します
-    initializeEnvironment();
+    // VFS の準備と env の初期化を待つ
+    await ensureEnvReady();
 
-    // このサーバーが提供できる機能をクライアントに伝えます
+    // サーバ情報と capabilities を返す（現時点は最小限）
     return {
       capabilities: {
-        // 今後実装する機能を追加していきます
+        // textDocumentSync etc. を後で追加可能
       },
       serverInfo: {
         name: 'WebWorker-LSP-Server',
@@ -90,28 +141,95 @@ export const LspCore = {
   },
 
   /**
-   * ドキュメントが開かれたときの通知を処理します。
-   * @param {{textDocument: {uri: string, text: string}}} params
+   * textDocument/didOpen
+   * params: { textDocument: { uri, languageId, version, text } }
    */
-  didOpen: (params) => {
-    const { uri, text } = params.textDocument;
-    const path = uri.replace('file://', '');
-    postLog(`📄 didOpen: ${path}`);
-    
-    if (!env) {
-      throw new Error('LSP environment not initialized. Call `lsp/initialize` first.');
-    }
+  didOpen: async (params) => {
+    try {
+      await ensureEnvReady();
+      const { uri, text, version } = params.textDocument;
+      const path = uri.replace('file://', '');
 
-    // v0.0.1の成功事例に倣い、createFile/updateFileを使い分ける
-    if (knownFiles.has(uri)) {
-      env.updateFile(path, text);
-    } else {
-      env.createFile(path, text);
-      knownFiles.add(uri);
-    }
+      postLog(`📄 didOpen ${path} (version:${version ?? 'n/a'})`);
 
-    // didOpenされたファイル自身のエラーをチェックして通知する
-    // 関連ファイルのエラーは、didChangeなどで別途ハンドリングする
-    publishDiagnostics(uri);
+      if (knownFiles.has(uri)) {
+        // 既存なら update
+        env.updateFile(path, text);
+        knownFiles.set(uri, { path, version });
+      } else {
+        env.createFile(path, text);
+        knownFiles.set(uri, { path, version });
+      }
+
+      publishDiagnostics(uri);
+      return { success: true };
+    } catch (error) {
+      postLog(`❌ didOpen error: ${error?.message ?? String(error)}`);
+      throw error;
+    }
   },
+
+  /**
+   * textDocument/didChange
+   * params: { textDocument: { uri, version }, contentChanges: [{ text }] }
+   */
+  didChange: async (params) => {
+    try {
+      await ensureEnvReady();
+      const { uri, version } = params.textDocument;
+      const changes = params.contentChanges || [];
+      const path = uri.replace('file://', '');
+
+      postLog(`✏️ didChange ${path} (version:${version ?? 'n/a'})`);
+
+      // 単純化: 最後の change.text を全文置換とする（incremental handling は後続）
+      if (!knownFiles.has(uri)) {
+        // file was not open, create it
+        const text = changes.length ? changes[changes.length - 1].text : '';
+        env.createFile(path, text);
+        knownFiles.set(uri, { path, version });
+      } else {
+        const text = changes.length
+          ? changes[changes.length - 1].text
+          : env.getSourceFile(path)?.text ?? '';
+        env.updateFile(path, text);
+        knownFiles.set(uri, { path, version });
+      }
+
+      publishDiagnostics(uri);
+      return { success: true };
+    } catch (error) {
+      postLog(`❌ didChange error: ${error?.message ?? String(error)}`);
+      throw error;
+    }
+  },
+
+  /**
+   * textDocument/didClose
+   * params: { textDocument: { uri } }
+   */
+  didClose: async (params) => {
+    try {
+      const { uri } = params.textDocument;
+      const path = uri.replace('file://', '');
+      postLog(`📕 didClose ${path}`);
+      // 簡易動作: knownFiles から削除するだけ（env 側で deleteFile しても良い）
+      knownFiles.delete(uri);
+      // publish empty diagnostics to clear issues
+      self.postMessage({
+        jsonrpc: '2.0',
+        method: 'textDocument/publishDiagnostics',
+        params: { uri, diagnostics: [] },
+      });
+      return { success: true };
+    } catch (error) {
+      postLog(`❌ didClose error: ${error?.message ?? String(error)}`);
+      throw error;
+    }
+  },
+
+  /**
+   * publishDiagnostics を外から呼べるようにする（テスト用など）
+   */
+  publishDiagnostics,
 };

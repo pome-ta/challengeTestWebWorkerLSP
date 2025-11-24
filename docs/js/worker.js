@@ -22,6 +22,8 @@ const handlers = {
   'lsp/initialize': LspCore.initialize,
   // LSP Document Synchronization
   'textDocument/didOpen': LspCore.didOpen,
+  'textDocument/didChange': LspCore.didChange,
+  'textDocument/didClose': LspCore.didClose,
 };
 
 // ============================================================
@@ -63,7 +65,13 @@ async function handleJsonRpc({ id, method, params }) {
   }
 
   try {
-    const result = await handler(params);
+    let result;
+    // ensureReadyは引数を取らないので特別扱いする
+    if (method === 'vfs/ensureReady') {
+      result = await handler();
+    } else {
+      result = await handler(params);
+    }
     postLog(`Finished: ${method}`);
     if (id) {
       self.postMessage({ jsonrpc: '2.0', id, result: result !== undefined ? result : null });

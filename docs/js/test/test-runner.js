@@ -1,5 +1,5 @@
 // test/test-runner.js
-// v0.0.2.4
+// v0.0.2.6
 
 console.log('🚀 test-runner.js loaded');
 
@@ -8,4 +8,5 @@ console.log('🚀 test-runner.js loaded');
 //import './v0.0.2/worker-vfs-cached-init.test.js';
 // import './v0.0.2/worker-lsp-initialize.test.js';
 // import './v0.0.2/worker-lsp-diagnostics.test.js';
-import './v0.0.2/worker-lsp-multi-file.test.js';
+import './v0.0.2/worker-vfs-file.test.js';
+// import './v0.0.2/worker-lsp-multi-file.test.js';
