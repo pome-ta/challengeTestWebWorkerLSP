@@ -1,11 +1,5 @@
 // core/vfs-core.js
 // v0.0.2.6
-// 変更点要約:
-// - createEnvironment に `initialFiles` 引数を追加 (path -> text オブジェクト)
-// - createEnvironment は system に先にファイルを書き込んでから createVirtualTypeScriptEnvironment を呼ぶ
-// - getDefaultCompilerOptions をエクスポート (Lsp 側で利用)
-// - ensureReady は並列呼び出しに安全
-
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
 import { postLog } from '../util/logger.js';
@@ -14,6 +8,7 @@ import { sleep } from '../util/async-utils.js';
 let cachedDefaultMap = null;
 let vfsReady = false;
 let _ensurePromise = null;
+
 
 async function createDefaultMapWithRetries(retryCount = 3, perAttemptTimeoutMs = 5000) {
   let lastError = null;
@@ -96,39 +91,40 @@ export function getDefaultCompilerOptions() {
 }
 
 /**
- * createEnvironment の改良点:
+ * createEnvironment:
  * - rootFiles: array of absolute paths (like '/file1.ts')
  * - initialFiles: object { '/file1.ts': 'content', '/file2.ts': '...' }
- *   -> createEnvironment は system に先にファイルを書き込む (write/create)
+ *
+ * Implementation detail:
+ * - Clone cachedDefaultMap into new Map
+ * - Inject initialFiles into clonedMap BEFORE calling vfs.createSystem(...)
+ * - This guarantees system contains those files at environment creation time.
  */
 export function createEnvironment(compilerOptions = {}, rootFiles = [], initialFiles = {}) {
   if (!cachedDefaultMap) {
     throw new Error('VFS not initialized. Call ensureReady() first.');
   }
 
-  // create system from cached default map
-  const system = vfs.createSystem(cachedDefaultMap);
+  // 1) clone default map to avoid mutating shared cachedDefaultMap
+  const mapClone = new Map(cachedDefaultMap);
 
-  // ensure initial files are present in the system BEFORE creating the environment
-  // initialFiles keys may be absolute paths or URIs; normalize to absolute path (no file://)
+  // 2) normalize and inject initialFiles into cloned map (key: absolute path)
   for (const [key, content] of Object.entries(initialFiles || {})) {
     const path = String(key).replace(/^file:\/\//, '');
-    // Use system.writeFile if available, otherwise vfs helpers via env later
-    try {
-      if (typeof system.writeFile === 'function') {
-        system.writeFile(path, content);
-      } else {
-        // fallback: set in the map (cachedDefaultMap is a Map but system may have setFile)
-        // createSystem provides a 'writeFile' normally; this fallback is defensive.
-        postLog(`⚠️ system.writeFile not available for ${path}, skipping direct write`);
-      }
-    } catch (e) {
-      postLog(`⚠️ Failed to write initial file ${path} into system: ${e?.message ?? String(e)}`);
-    }
+    // ensure leading slash for stability
+    const normalized = path.startsWith('/') ? path : `/${path}`;
+    mapClone.set(normalized, String(content));
+    postLog(`🧩 createEnvironment: injected initial file into cloned map: ${normalized}`);
   }
 
-  // normalize root paths (strip file:// if any)
-  const rootPaths = (rootFiles || []).map((r) => String(r).replace(/^file:\/\//, ''));
+  // 3) create system from the cloned map (so system already contains initial files)
+  const system = vfs.createSystem(mapClone);
+
+  // 4) normalize root paths and create env
+  const rootPaths = (rootFiles || []).map((r) => {
+    const p = String(r).replace(/^file:\/\//, '');
+    return p.startsWith('/') ? p : `/${p}`;
+  });
 
   const defaultOptions = getDefaultCompilerOptions();
   const opts = Object.assign({}, defaultOptions, compilerOptions);
@@ -136,23 +132,22 @@ export function createEnvironment(compilerOptions = {}, rootFiles = [], initialF
   const env = vfs.createVirtualTypeScriptEnvironment(system, rootPaths, ts, opts);
   postLog(`🧠 VFS environment created (via createEnvironment); roots: [${rootPaths.join(', ')}]`);
 
-  // After env creation, ensure that environment's files have content matching initialFiles
-  // (some vfs implementations may not pick up system.writeFile into env source file content)
+  // 5) After env creation, ensure content is present in env (defensive)
   for (const [key, content] of Object.entries(initialFiles || {})) {
     const path = String(key).replace(/^file:\/\//, '');
+    const normalized = path.startsWith('/') ? path : `/${path}`;
     try {
-      // If env has file, update it; else create it.
-      if (env.getSourceFile && env.getSourceFile(path)) {
-        env.updateFile(path, content);
+      if (env.getSourceFile && env.getSourceFile(normalized)) {
+        env.updateFile(normalized, content);
       } else {
-        env.createFile(path, content);
+        env.createFile(normalized, content);
       }
     } catch (e) {
-      postLog(`⚠️ createEnvironment sync file apply failed for ${path}: ${e?.message ?? String(e)}`);
+      postLog(`⚠️ createEnvironment sync file apply failed for ${normalized}: ${e?.message ?? String(e)}`);
     }
   }
 
-  // prime the language service program
+  // 6) prime the language service program
   try {
     env.languageService.getProgram();
   } catch (e) {

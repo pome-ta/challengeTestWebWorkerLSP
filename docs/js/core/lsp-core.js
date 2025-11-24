@@ -85,21 +85,24 @@ class LspServer {
     this.#clearDiagnostics(uri);
   }
 
+  // core/lsp-core.js (inside LspServer class)
+  // PATCH: after createEnvironment(), ensure program contains root files; short retry loop
+  
   async #recreateEnv() {
-    // collect root files (absolute paths) and initialFiles map
     const rootFiles = [];
     const initialFiles = {};
     for (const [uri, { text }] of this.#openFiles.entries()) {
       const path = this.#uriToPath(uri);
-      rootFiles.push(path);
-      initialFiles[path] = text;
+      // ensure normalized absolute path
+      const normalized = path.startsWith('/') ? path : `/${path}`;
+      rootFiles.push(normalized);
+      initialFiles[normalized] = text;
     }
-
-    // call VfsCore.createEnvironment with initialFiles so system contains files BEFORE Program build
+  
     try {
       this.#env = VfsCore.createEnvironment(this.#compilerOptions, rootFiles, initialFiles);
-
-      // ensure content is synced (defensive)
+  
+      // defensive sync (existing logic)
       for (const [path, content] of Object.entries(initialFiles)) {
         try {
           if (this.#env.getSourceFile && this.#env.getSourceFile(path)) {
@@ -111,14 +114,42 @@ class LspServer {
           postLog(`⚠️ recreateEnv sync failed for ${path}: ${e?.message ?? String(e)}`);
         }
       }
-
-      // force program build to ensure up-to-date
+  
+      // force program build + verify presence of root files in program
+      let program;
       try {
-        this.#env.languageService.getProgram();
+        program = this.#env.languageService.getProgram();
       } catch (e) {
         postLog(`⚠️ getProgram() during recreateEnv failed: ${e?.message ?? String(e)}`);
       }
-
+  
+      // Retry loop: confirm program has each root sourceFile; short sleep/backoff if missing.
+      const maxRetries = 5;
+      const retryDelayMs = 30;
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const missing = [];
+        if (program) {
+          for (const p of rootFiles) {
+            if (!program.getSourceFile(p)) missing.push(p);
+          }
+        }
+        if (missing.length === 0) {
+          // all good
+          break;
+        }
+        if (attempt === maxRetries) {
+          postLog(`⚠️ recreateEnv: program missing files after retries: ${missing.join(', ')}`);
+          break;
+        }
+        // small wait then rebuild program reference
+        await sleep(retryDelayMs * (attempt + 1));
+        try {
+          program = this.#env.languageService.getProgram();
+        } catch (e) {
+          postLog(`⚠️ getProgram() retry failed: ${e?.message ?? String(e)}`);
+        }
+      }
+  
       postLog(`🧠 recreateEnv done; roots: [${rootFiles.join(', ')}]`);
     } catch (e) {
       postLog(`❌ recreateEnv failed: ${e?.message ?? String(e)}`);
