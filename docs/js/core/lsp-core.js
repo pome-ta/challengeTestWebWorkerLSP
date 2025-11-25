@@ -1,14 +1,17 @@
 // core/lsp-core.js
-// v0.0.2.6
-// 変更点要約:
-// - LspServer.#recreateEnv() が VfsCore.createEnvironment(..., initialFiles) を使うように修正
-// - didOpen/didChange/didClose は openFiles を保持し、recreateEnv により env 作成時点でファイル中身が system に存在することを保証
-// - publishDiagnostics の安定化(env.getProgram を確実に呼ぶ)
-// - 最小限の defensive エラーハンドリングを追加
+// v0.0.2.7
+// - improved/stable variant for browser VFS usage
+// 変更点要旨(ファイル先頭コメント):
+// - sleep import を追加
+// - initialize() で compilerOptions をサニタイズ(ブラウザ向け)
+// - recreateEnv の root path 正規化と program 存在確認リトライを強化
+// - diagnostics ログの詳細化(テストデバッグ向け)
+// - uri/path 正規化を厳格化(前方スラッシュを確保)
 
 import ts from 'https://esm.sh/typescript';
 import { postLog } from '../util/logger.js';
 import { VfsCore } from './vfs-core.js';
+import { sleep } from '../util/async-utils.js'; // <-- 必須
 
 class LspServer {
   #env = null;
@@ -21,12 +24,86 @@ class LspServer {
     postLog('✨ LspServer instance created');
   }
 
+  /**
+   * sanitizeCompilerOptions
+   * - ブラウザ + @typescript/vfs 実行環境で問題を起こしやすいオプションを無害化/補完する
+   * - 常に安全な既定値 (noEmit: true, moduleResolution: Bundler/NodeJs のどちらか) を返す
+   */
+  #sanitizeCompilerOptions(incoming = {}) {
+    const defaults = VfsCore.getDefaultCompilerOptions ? VfsCore.getDefaultCompilerOptions() : {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      strict: true,
+    };
+
+    // shallow merge: incoming overrides defaults
+    const opts = Object.assign({}, defaults, incoming || {});
+
+    // Ensure noEmit is true to avoid TS errors when enabling certain flags like allowImportingTsExtensions
+    if (opts.allowImportingTsExtensions && !opts.noEmit) {
+      postLog(`🔧 sanitizeCompilerOptions: enabling noEmit because allowImportingTsExtensions requested`);
+      opts.noEmit = true;
+    }
+
+    // If resolvePackageJson* flags are present, ensure moduleResolution is compatible.
+    const needsNodeLikeResolution =
+      !!opts.resolvePackageJsonExports || !!opts.resolvePackageJsonImports;
+    if (needsNodeLikeResolution) {
+      // prefer Bundler (works in many browser/vfs scenarios); otherwise fall back to NodeJs
+      if (
+        opts.moduleResolution !== ts.ModuleResolutionKind.Node16 &&
+        opts.moduleResolution !== ts.ModuleResolutionKind.NodeNext &&
+        opts.moduleResolution !== ts.ModuleResolutionKind.Bundler
+      ) {
+        postLog(
+          `🔧 sanitizeCompilerOptions: resolvePackageJson* requested -> setting moduleResolution to Bundler`
+        );
+        opts.moduleResolution = ts.ModuleResolutionKind.Bundler;
+      }
+    }
+
+    // Disallow problematic Node-only flags unless moduleResolution is Node16/NodeNext/Bundler
+    if (
+      (opts.resolvePackageJsonExports || opts.resolvePackageJsonImports) &&
+      ![ts.ModuleResolutionKind.Node16, ts.ModuleResolutionKind.NodeNext, ts.ModuleResolutionKind.Bundler].includes(opts.moduleResolution)
+    ) {
+      postLog(`🔧 sanitizeCompilerOptions: clearing resolvePackageJson* because moduleResolution is incompatible`);
+      opts.resolvePackageJsonExports = false;
+      opts.resolvePackageJsonImports = false;
+    }
+
+    // Defensive: remove or coerce options that are unlikely to be supported in the browser vfs
+    // (This list can be extended if further incompatibilities appear)
+    const unsafeFlags = [
+      'incremental',
+      'tsBuildInfoFile',
+      'outDir',
+      'rootDir',
+      'outFile',
+      'composite',
+    ];
+    for (const f of unsafeFlags) {
+      if (f in opts) {
+        postLog(`🔧 sanitizeCompilerOptions: removing possibly-unsafe option "${f}" for browser VFS`);
+        delete opts[f];
+      }
+    }
+
+    return opts;
+  }
+
   async initialize(params = {}) {
-    this.#compilerOptions =
-      params.initializationOptions?.compilerOptions || VfsCore.getDefaultCompilerOptions();
+    // incoming compiler options may come from client initialization options
+    const incoming = params.initializationOptions?.compilerOptions || {};
+    this.#compilerOptions = this.#sanitizeCompilerOptions(incoming);
+
+    postLog(`LSP initialize (sanitized opts): ${JSON.stringify(this.#compilerOptions)}`);
 
     await VfsCore.ensureReady();
-    // 初期は openFiles が無いので空の env を作る(将来的には workspaceRoots も渡す)
+
+    // create initial env with no root files; subsequent didOpen will rebuild roots
+    // createEnvironment expects compilerOptions and rootFiles/initialFiles later
     this.#env = VfsCore.createEnvironment(this.#compilerOptions, [], {});
     postLog('✅ LspServer initialized, env created.');
   }
@@ -85,24 +162,29 @@ class LspServer {
     this.#clearDiagnostics(uri);
   }
 
-  // core/lsp-core.js (inside LspServer class)
-  // PATCH: after createEnvironment(), ensure program contains root files; short retry loop
-  
+  /**
+   * #recreateEnv
+   * - openFiles の内容を rootFiles / initialFiles として VfsCore.createEnvironment に渡す
+   * - createEnvironment 内で system にファイルを書き込み -> env を作る方針に依存
+   * - 作成直後に program を確認し、root source files が取り込まれているかを短時間リトライして確認する
+   */
   async #recreateEnv() {
+    // collect root files (absolute paths) and initialFiles map
     const rootFiles = [];
     const initialFiles = {};
     for (const [uri, { text }] of this.#openFiles.entries()) {
-      const path = this.#uriToPath(uri);
-      // ensure normalized absolute path
-      const normalized = path.startsWith('/') ? path : `/${path}`;
-      rootFiles.push(normalized);
-      initialFiles[normalized] = text;
+      let path = this.#uriToPath(uri);
+      // ensure path starts with '/'
+      if (!path.startsWith('/')) path = `/${path}`;
+      rootFiles.push(path);
+      initialFiles[path] = text;
     }
-  
+
     try {
+      // Create new env with sanitized compiler options
       this.#env = VfsCore.createEnvironment(this.#compilerOptions, rootFiles, initialFiles);
-  
-      // defensive sync (existing logic)
+
+      // ensure content is synced (defensive)
       for (const [path, content] of Object.entries(initialFiles)) {
         try {
           if (this.#env.getSourceFile && this.#env.getSourceFile(path)) {
@@ -114,15 +196,15 @@ class LspServer {
           postLog(`⚠️ recreateEnv sync failed for ${path}: ${e?.message ?? String(e)}`);
         }
       }
-  
-      // force program build + verify presence of root files in program
+
+      // force program build to ensure up-to-date
       let program;
       try {
         program = this.#env.languageService.getProgram();
       } catch (e) {
         postLog(`⚠️ getProgram() during recreateEnv failed: ${e?.message ?? String(e)}`);
       }
-  
+
       // Retry loop: confirm program has each root sourceFile; short sleep/backoff if missing.
       const maxRetries = 5;
       const retryDelayMs = 30;
@@ -132,15 +214,21 @@ class LspServer {
           for (const p of rootFiles) {
             if (!program.getSourceFile(p)) missing.push(p);
           }
+        } else {
+          // if program is not available, consider it missing and re-fetch
+          missing.push(...rootFiles);
         }
+
         if (missing.length === 0) {
           // all good
           break;
         }
+
         if (attempt === maxRetries) {
           postLog(`⚠️ recreateEnv: program missing files after retries: ${missing.join(', ')}`);
           break;
         }
+
         // small wait then rebuild program reference
         await sleep(retryDelayMs * (attempt + 1));
         try {
@@ -149,7 +237,7 @@ class LspServer {
           postLog(`⚠️ getProgram() retry failed: ${e?.message ?? String(e)}`);
         }
       }
-  
+
       postLog(`🧠 recreateEnv done; roots: [${rootFiles.join(', ')}]`);
     } catch (e) {
       postLog(`❌ recreateEnv failed: ${e?.message ?? String(e)}`);
@@ -187,8 +275,7 @@ class LspServer {
     const syntactic = this.#env.languageService.getSyntacticDiagnostics(path) || [];
     const semantic = this.#env.languageService.getSemanticDiagnostics(path) || [];
     const all = [...syntactic, ...semantic];
-    
-    
+
     // 追加: diagnostics の詳細をログ出力(テスト時の原因特定用)
     if (all.length > 0) {
       postLog(`🔍 Diagnostics detail for ${path}:`);
@@ -201,8 +288,6 @@ class LspServer {
         }
       }
     }
-
-  
 
     const diagnostics = all.map((d) => this.#tsDiagToLsp(d, path, program));
 
@@ -239,9 +324,11 @@ class LspServer {
   }
 
   #uriToPath(uri) {
-    // accept both file:/// and '/...' forms
     if (!uri) return '';
-    return uri.replace(/^file:\/\//, '');
+    // Accept both file:///... and '/...' and ensure leading slash for VFS stability
+    let path = String(uri).replace(/^file:\/\//, '');
+    if (!path.startsWith('/')) path = `/${path}`;
+    return path;
   }
 }
 

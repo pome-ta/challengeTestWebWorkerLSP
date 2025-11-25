@@ -1,5 +1,5 @@
 // core/vfs-core.js
-// v0.0.3.0  (full improved version)
+// v0.0.2.7
 // This version provides:
 // - Stable compiler options for NodeJs/NodeNext import resolution
 // - Unified normalization for all paths

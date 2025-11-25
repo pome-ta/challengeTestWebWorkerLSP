@@ -1,5 +1,5 @@
 // test/v0.0.2/worker-lsp-multi-file.test.js
-// v0.0.2.6
+// v0.0.2.7
 
 import { expect } from 'chai';
 import {
