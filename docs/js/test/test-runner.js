@@ -1,5 +1,5 @@
 // test/test-runner.js
-// v0.0.2.7
+// v0.0.2.8
 
 console.log('🚀 test-runner.js loaded');
 
@@ -9,4 +9,7 @@ console.log('🚀 test-runner.js loaded');
 //import './v0.0.2/worker-lsp-initialize.test.js';
 //import './v0.0.2/worker-lsp-diagnostics.test.js';
 //import './v0.0.2/worker-vfs-file.test.js';
-import './v0.0.2/worker-lsp-multi-file.test.js';
+//import './v0.0.2/worker-lsp-multi-file.test.js';
+
+import './v0.0.2/worker-diagnostics-flatten.test.js';
+
