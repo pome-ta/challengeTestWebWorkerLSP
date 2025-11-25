@@ -187,6 +187,22 @@ class LspServer {
     const syntactic = this.#env.languageService.getSyntacticDiagnostics(path) || [];
     const semantic = this.#env.languageService.getSemanticDiagnostics(path) || [];
     const all = [...syntactic, ...semantic];
+    
+    
+    // 追加: diagnostics の詳細をログ出力(テスト時の原因特定用)
+    if (all.length > 0) {
+      postLog(`🔍 Diagnostics detail for ${path}:`);
+      for (const d of all) {
+        try {
+          const msg = ts.flattenDiagnosticMessageText(d.messageText, '\n');
+          postLog(`  - code:${d.code} start:${d.start ?? '-'} len:${d.length ?? '-'} msg:${msg}`);
+        } catch (e) {
+          postLog(`  - (failed to stringify diag) ${String(e?.message ?? e)}`);
+        }
+      }
+    }
+
+  
 
     const diagnostics = all.map((d) => this.#tsDiagToLsp(d, path, program));
 
