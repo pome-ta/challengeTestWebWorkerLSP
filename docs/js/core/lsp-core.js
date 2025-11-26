@@ -88,7 +88,7 @@ class LspServer {
       }
     }
     // 最終確定(TS の auto-fallback 対策)
-    opts.moduleResolution = ts.ModuleResolutionKind.Bundler;
+    // opts.moduleResolution = ts.ModuleResolutionKind.Bundler;
 
     return opts;
   }

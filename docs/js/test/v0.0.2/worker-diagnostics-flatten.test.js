@@ -13,7 +13,8 @@ import {
 import ts from 'https://esm.sh/typescript';
 
 (async () => {
-  const testName = 'Diagnostics flatten: TS DiagnosticMessageChain -> LSP message string';
+  const testName =
+    'Diagnostics flatten: TS DiagnosticMessageChain -> LSP message string';
   let worker;
 
   try {
@@ -34,22 +35,34 @@ import ts from 'https://esm.sh/typescript';
     `;
 
     sendNotification(worker, 'textDocument/didOpen', {
-      textDocument: { uri: fileUri, languageId: 'typescript', version: 1, text: fileContent }
+      textDocument: {
+        uri: fileUri,
+        languageId: 'typescript',
+        version: 1,
+        text: fileContent,
+      },
     });
 
     // 2) publishDiagnostics を待つ
-    const params = await waitForNotification(worker, 'textDocument/publishDiagnostics', p => p.uri === fileUri);
+    const params = await waitForNotification(
+      worker,
+      'textDocument/publishDiagnostics',
+      (p) => p.uri === fileUri
+    );
 
     // 3) 検証
-    expect(params).to.have.property('diagnostics').that.is.an('array').and.is.not.empty;
+    expect(params).to.have.property('diagnostics').that.is.an('array').and.is
+      .not.empty;
 
     // 4) 追加検証: 生成された LSP diagnostics の message と ts.flattenDiagnosticMessageText の一致
     //    この検証は worker 内で変換に使っている diag オブジェクト (raw TS diag) を直接比較できない可能性があるので、
     //    精密検査用に Worker 側に raw diag text を返すテストフラグを追加するか、
     //    またはメッセージが期待する部分文字列を含むか確認する。
-    const lspMessages = params.diagnostics.map(d => d.message);
+    const lspMessages = params.diagnostics.map((d) => d.message);
     // 期待: 何らかのチェーン的メッセージが flatten されている(改行を含む)
-    const hasNewline = lspMessages.some(m => typeof m === 'string' && m.includes('\n'));
+    const hasNewline = lspMessages.some(
+      (m) => typeof m === 'string' && m.includes('\n')
+    );
     expect(hasNewline).to.be.true;
 
     addResult(testName, true);
