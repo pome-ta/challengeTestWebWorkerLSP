@@ -104,7 +104,6 @@ export function getDefaultCompilerOptions() {
   return {
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.ESNext,
-    // moduleResolution: ts.ModuleResolutionKind.NodeJs,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     strict: true,
     allowImportingTsExtensions: true,
@@ -113,7 +112,7 @@ export function getDefaultCompilerOptions() {
     resolvePackageJsonImports: true,
     skipLibCheck: true,
     useDefineForClassFields: true,
-    // noEmit is left to LSP initializer sanitization (sometimes forced)
+    noEmit: true,
   };
 }
 

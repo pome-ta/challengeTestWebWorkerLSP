@@ -21,6 +21,7 @@ class LspServer {
   }
 
   #sanitizeCompilerOptions(incoming = {}) {
+    // パターンC: default は Bundler。最終強制なし。
     const defaults = VfsCore.getDefaultCompilerOptions
       ? VfsCore.getDefaultCompilerOptions()
       : {
@@ -30,8 +31,9 @@ class LspServer {
           strict: true,
         };
 
-    const opts = Object.assign({}, defaults, incoming || {});
+    const opts = { ...defaults, ...(incoming || {}) };
 
+    // 1) allowImportingTsExtensions -> noEmit 強制
     if (opts.allowImportingTsExtensions && !opts.noEmit) {
       postLog(
         'sanitizeCompilerOptions: enabling noEmit because allowImportingTsExtensions requested'
@@ -39,38 +41,28 @@ class LspServer {
       opts.noEmit = true;
     }
 
-    const needsNodeLikeResolution =
-      !!opts.resolvePackageJsonExports || !!opts.resolvePackageJsonImports;
-    if (needsNodeLikeResolution) {
-      if (
-        opts.moduleResolution !== ts.ModuleResolutionKind.Node16 &&
-        opts.moduleResolution !== ts.ModuleResolutionKind.NodeNext &&
-        opts.moduleResolution !== ts.ModuleResolutionKind.Bundler &&
-        opts.moduleResolution !== ts.ModuleResolutionKind.NodeJs
-      ) {
+    // 2) resolvePackageJson* が有効なら moduleResolution は bundler/node16/nodenext のいずれか必須
+    //    デフォルトは bundler なので override された場合のみ発火する
+    const needsNodeLike =
+      opts.resolvePackageJsonExports === true ||
+      opts.resolvePackageJsonImports === true;
+
+    if (needsNodeLike) {
+      const mr = opts.moduleResolution;
+      const valid =
+        mr === ts.ModuleResolutionKind.Bundler ||
+        mr === ts.ModuleResolutionKind.Node16 ||
+        mr === ts.ModuleResolutionKind.NodeNext;
+
+      if (!valid) {
         postLog(
-          'sanitizeCompilerOptions: resolvePackageJson* requested -> setting moduleResolution to Bundler'
+          `sanitizeCompilerOptions: resolvePackageJson* requires node-like resolution; fixing moduleResolution->Bundler`
         );
         opts.moduleResolution = ts.ModuleResolutionKind.Bundler;
       }
     }
 
-    if (
-      (opts.resolvePackageJsonExports || opts.resolvePackageJsonImports) &&
-      ![
-        ts.ModuleResolutionKind.Node16,
-        ts.ModuleResolutionKind.NodeNext,
-        ts.ModuleResolutionKind.Bundler,
-        ts.ModuleResolutionKind.NodeJs,
-      ].includes(opts.moduleResolution)
-    ) {
-      postLog(
-        'sanitizeCompilerOptions: clearing resolvePackageJson* because moduleResolution is incompatible'
-      );
-      opts.resolvePackageJsonExports = false;
-      opts.resolvePackageJsonImports = false;
-    }
-
+    // 3) 危険な compilerOptions を除去
     const unsafeFlags = [
       'incremental',
       'tsBuildInfoFile',
@@ -87,8 +79,6 @@ class LspServer {
         delete opts[f];
       }
     }
-    // 最終確定(TS の auto-fallback 対策)
-    // opts.moduleResolution = ts.ModuleResolutionKind.Bundler;
 
     return opts;
   }
