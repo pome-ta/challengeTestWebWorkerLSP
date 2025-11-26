@@ -21,21 +21,26 @@ class LspServer {
   }
 
   #sanitizeCompilerOptions(incoming = {}) {
-    const defaults = VfsCore.getDefaultCompilerOptions ? VfsCore.getDefaultCompilerOptions() : {
-      target: ts.ScriptTarget.ES2022,
-      module: ts.ModuleKind.ESNext,
-      moduleResolution: ts.ModuleResolutionKind.Bundler,
-      strict: true,
-    };
+    const defaults = VfsCore.getDefaultCompilerOptions
+      ? VfsCore.getDefaultCompilerOptions()
+      : {
+          target: ts.ScriptTarget.ES2022,
+          module: ts.ModuleKind.ESNext,
+          moduleResolution: ts.ModuleResolutionKind.Bundler,
+          strict: true,
+        };
 
     const opts = Object.assign({}, defaults, incoming || {});
 
     if (opts.allowImportingTsExtensions && !opts.noEmit) {
-      postLog('sanitizeCompilerOptions: enabling noEmit because allowImportingTsExtensions requested');
+      postLog(
+        'sanitizeCompilerOptions: enabling noEmit because allowImportingTsExtensions requested'
+      );
       opts.noEmit = true;
     }
 
-    const needsNodeLikeResolution = !!opts.resolvePackageJsonExports || !!opts.resolvePackageJsonImports;
+    const needsNodeLikeResolution =
+      !!opts.resolvePackageJsonExports || !!opts.resolvePackageJsonImports;
     if (needsNodeLikeResolution) {
       if (
         opts.moduleResolution !== ts.ModuleResolutionKind.Node16 &&
@@ -43,16 +48,25 @@ class LspServer {
         opts.moduleResolution !== ts.ModuleResolutionKind.Bundler &&
         opts.moduleResolution !== ts.ModuleResolutionKind.NodeJs
       ) {
-        postLog('sanitizeCompilerOptions: resolvePackageJson* requested -> setting moduleResolution to Bundler');
+        postLog(
+          'sanitizeCompilerOptions: resolvePackageJson* requested -> setting moduleResolution to Bundler'
+        );
         opts.moduleResolution = ts.ModuleResolutionKind.Bundler;
       }
     }
 
     if (
       (opts.resolvePackageJsonExports || opts.resolvePackageJsonImports) &&
-      ![ts.ModuleResolutionKind.Node16, ts.ModuleResolutionKind.NodeNext, ts.ModuleResolutionKind.Bundler, ts.ModuleResolutionKind.NodeJs].includes(opts.moduleResolution)
+      ![
+        ts.ModuleResolutionKind.Node16,
+        ts.ModuleResolutionKind.NodeNext,
+        ts.ModuleResolutionKind.Bundler,
+        ts.ModuleResolutionKind.NodeJs,
+      ].includes(opts.moduleResolution)
     ) {
-      postLog('sanitizeCompilerOptions: clearing resolvePackageJson* because moduleResolution is incompatible');
+      postLog(
+        'sanitizeCompilerOptions: clearing resolvePackageJson* because moduleResolution is incompatible'
+      );
       opts.resolvePackageJsonExports = false;
       opts.resolvePackageJsonImports = false;
     }
@@ -67,14 +81,15 @@ class LspServer {
     ];
     for (const f of unsafeFlags) {
       if (f in opts) {
-        postLog(`sanitizeCompilerOptions: removing possibly-unsafe option "${f}"`);
+        postLog(
+          `sanitizeCompilerOptions: removing possibly-unsafe option "${f}"`
+        );
         delete opts[f];
       }
     }
     // 最終確定(TS の auto-fallback 対策)
     opts.moduleResolution = ts.ModuleResolutionKind.Bundler;
 
- 
     return opts;
   }
 
@@ -82,7 +97,11 @@ class LspServer {
     const incoming = params.initializationOptions?.compilerOptions || {};
     this.#compilerOptions = this.#sanitizeCompilerOptions(incoming);
 
-    postLog(`LSP initialize (sanitized opts): ${JSON.stringify(this.#compilerOptions)}`);
+    postLog(
+      `LSP initialize (sanitized opts): ${JSON.stringify(
+        this.#compilerOptions
+      )}`
+    );
 
     await VfsCore.ensureReady();
 
@@ -149,7 +168,11 @@ class LspServer {
     }
 
     try {
-      this.#env = VfsCore.createEnvironment(this.#compilerOptions, rootFiles, initialFiles);
+      this.#env = VfsCore.createEnvironment(
+        this.#compilerOptions,
+        rootFiles,
+        initialFiles
+      );
 
       for (const [path, content] of Object.entries(initialFiles)) {
         try {
@@ -159,7 +182,9 @@ class LspServer {
             this.#env.createFile(path, content);
           }
         } catch (e) {
-          postLog(`recreateEnv sync failed for ${path}: ${e?.message ?? String(e)}`);
+          postLog(
+            `recreateEnv sync failed for ${path}: ${e?.message ?? String(e)}`
+          );
         }
       }
 
@@ -167,7 +192,9 @@ class LspServer {
       try {
         program = this.#env.languageService.getProgram();
       } catch (e) {
-        postLog(`getProgram() during recreateEnv failed: ${e?.message ?? String(e)}`);
+        postLog(
+          `getProgram() during recreateEnv failed: ${e?.message ?? String(e)}`
+        );
       }
 
       const maxRetries = 5;
@@ -185,7 +212,11 @@ class LspServer {
         if (missing.length === 0) break;
 
         if (attempt === maxRetries) {
-          postLog(`recreateEnv: program missing files after retries: ${missing.join(', ')}`);
+          postLog(
+            `recreateEnv: program missing files after retries: ${missing.join(
+              ', '
+            )}`
+          );
           break;
         }
 
@@ -209,7 +240,9 @@ class LspServer {
       clearTimeout(this.#diagTimers.get(uri));
     }
     const timer = setTimeout(() => {
-      this.publishDiagnostics(uri).catch((e) => postLog(`publishDiagnostics error: ${e?.message ?? String(e)}`));
+      this.publishDiagnostics(uri).catch((e) =>
+        postLog(`publishDiagnostics error: ${e?.message ?? String(e)}`)
+      );
       this.#diagTimers.delete(uri);
     }, this.#diagnosticDebounceMs);
     this.#diagTimers.set(uri, Number(timer));
@@ -226,11 +259,15 @@ class LspServer {
     try {
       program = this.#env.languageService.getProgram();
     } catch (e) {
-      postLog(`getProgram() failed before diagnostics: ${e?.message ?? String(e)}`);
+      postLog(
+        `getProgram() failed before diagnostics: ${e?.message ?? String(e)}`
+      );
     }
 
-    const syntactic = this.#env.languageService.getSyntacticDiagnostics(path) || [];
-    const semantic = this.#env.languageService.getSemanticDiagnostics(path) || [];
+    const syntactic =
+      this.#env.languageService.getSyntacticDiagnostics(path) || [];
+    const semantic =
+      this.#env.languageService.getSemanticDiagnostics(path) || [];
     const all = [...syntactic, ...semantic];
 
     if (all.length > 0) {
@@ -238,7 +275,11 @@ class LspServer {
       for (const d of all) {
         try {
           const msg = ts.flattenDiagnosticMessageText(d.messageText, '\n');
-          postLog(`  - code:${d.code} start:${d.start ?? '-'} len:${d.length ?? '-'} msg:${msg}`);
+          postLog(
+            `  - code:${d.code} start:${d.start ?? '-'} len:${
+              d.length ?? '-'
+            } msg:${msg}`
+          );
         } catch (e) {
           postLog(`  - (failed to stringify diag) ${String(e?.message ?? e)}`);
         }
@@ -267,13 +308,17 @@ class LspServer {
     const sourceFile = program?.getSourceFile(path);
     const start = diag.start ?? 0;
     const length = diag.length ?? 0;
-    const startPos = sourceFile ? ts.getLineAndCharacterOfPosition(sourceFile, start) : { line: 0, character: 0 };
-    const endPos = sourceFile ? ts.getLineAndCharacterOfPosition(sourceFile, start + length) : { line: 0, character: 0 };
+    const startPos = sourceFile
+      ? ts.getLineAndCharacterOfPosition(sourceFile, start)
+      : { line: 0, character: 0 };
+    const endPos = sourceFile
+      ? ts.getLineAndCharacterOfPosition(sourceFile, start + length)
+      : { line: 0, character: 0 };
 
     return {
       range: { start: startPos, end: endPos },
       message: ts.flattenDiagnosticMessageText(diag.messageText, '\n'),
-      severity: (typeof diag.category === 'number') ? diag.category + 1 : 1,
+      severity: typeof diag.category === 'number' ? diag.category + 1 : 1,
       source: 'ts',
       code: diag.code,
     };
@@ -296,8 +341,10 @@ class LspServer {
       return { diagnostics: [] };
     }
     const path = this.#uriToPath(uri);
-    const semantic = this.#env.languageService.getSemanticDiagnostics(path) || [];
-    const syntactic = this.#env.languageService.getSyntacticDiagnostics(path) || [];
+    const semantic =
+      this.#env.languageService.getSemanticDiagnostics(path) || [];
+    const syntactic =
+      this.#env.languageService.getSyntacticDiagnostics(path) || [];
     const all = [...syntactic, ...semantic];
 
     // Map to JSON-safe structure; preserve messageText which may be chain object

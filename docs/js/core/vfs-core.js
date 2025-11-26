@@ -24,7 +24,10 @@ function mapClone(src) {
   return new Map(src);
 }
 
-async function createDefaultMapWithRetries(retryCount = 3, perAttemptTimeoutMs = 5000) {
+async function createDefaultMapWithRetries(
+  retryCount = 3,
+  perAttemptTimeoutMs = 5000
+) {
   let lastError = null;
   for (let attempt = 1; attempt <= retryCount; attempt++) {
     postLog(`VFS init attempt ${attempt}/${retryCount}`);
@@ -114,7 +117,11 @@ export function getDefaultCompilerOptions() {
   };
 }
 
-export function createEnvironment(compilerOptions = {}, rootFiles = [], initialFiles = {}) {
+export function createEnvironment(
+  compilerOptions = {},
+  rootFiles = [],
+  initialFiles = {}
+) {
   if (!cachedDefaultMap) {
     throw new Error('VFS not initialized. Call ensureReady() first.');
   }
@@ -130,7 +137,11 @@ export function createEnvironment(compilerOptions = {}, rootFiles = [], initialF
       mapForEnv.set(key, data);
       postLog(`createEnvironment: injected initial file: ${key}`);
     } catch (e) {
-      postLog(`createEnvironment: failed to inject initial file ${rawKey}: ${String(e?.message ?? e)}`);
+      postLog(
+        `createEnvironment: failed to inject initial file ${rawKey}: ${String(
+          e?.message ?? e
+        )}`
+      );
     }
   }
 
@@ -141,9 +152,20 @@ export function createEnvironment(compilerOptions = {}, rootFiles = [], initialF
   const defaultOptions = getDefaultCompilerOptions();
   const opts = Object.assign({}, defaultOptions, compilerOptions);
 
-  postLog(`createEnvironment: about to create env; roots: [${rootPaths.join(', ')}], initialFiles: [${Object.keys(normalizedInitialFiles).join(', ')}], opts: ${JSON.stringify(opts)}`);
+  postLog(
+    `createEnvironment: about to create env; roots: [${rootPaths.join(
+      ', '
+    )}], initialFiles: [${Object.keys(normalizedInitialFiles).join(
+      ', '
+    )}], opts: ${JSON.stringify(opts)}`
+  );
 
-  const env = vfs.createVirtualTypeScriptEnvironment(system, rootPaths, ts, opts);
+  const env = vfs.createVirtualTypeScriptEnvironment(
+    system,
+    rootPaths,
+    ts,
+    opts
+  );
 
   postLog(`VFS environment created; roots: [${rootPaths.join(', ')}]`);
 
@@ -156,14 +178,20 @@ export function createEnvironment(compilerOptions = {}, rootFiles = [], initialF
         env.createFile(path, content);
       }
     } catch (e) {
-      postLog(`createEnvironment sync apply failed for ${path}: ${String(e?.message ?? e)}`);
+      postLog(
+        `createEnvironment sync apply failed for ${path}: ${String(
+          e?.message ?? e
+        )}`
+      );
     }
   }
 
   try {
     env.languageService.getProgram();
   } catch (e) {
-    postLog(`getProgram() failed after env creation: ${String(e?.message ?? e)}`);
+    postLog(
+      `getProgram() failed after env creation: ${String(e?.message ?? e)}`
+    );
   }
 
   return env;

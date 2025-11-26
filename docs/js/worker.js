@@ -40,7 +40,10 @@ async function handleJsonRpcMessage(msg) {
       self.postMessage({
         jsonrpc: '2.0',
         id,
-        error: { code: JsonRpcErrorCode.InvalidRequest, message: 'Invalid JSON-RPC 2.0 payload' },
+        error: {
+          code: JsonRpcErrorCode.InvalidRequest,
+          message: 'Invalid JSON-RPC 2.0 payload',
+        },
       });
     }
     return;
@@ -48,12 +51,17 @@ async function handleJsonRpcMessage(msg) {
 
   postLog(`Received: ${method} (id:${id ?? '-'})`);
 
-  const requiresVfs = method.startsWith('lsp/') || method.startsWith('textDocument/');
+  const requiresVfs =
+    method.startsWith('lsp/') || method.startsWith('textDocument/');
   if (requiresVfs && !VfsCore.isReady()) {
     const message = 'VFS not ready. Call `vfs/ensureReady` first.';
     postLog(`Error: ${message}`);
     if (id) {
-      self.postMessage({ jsonrpc: '2.0', id, error: { code: JsonRpcErrorCode.ServerNotInitialized, message } });
+      self.postMessage({
+        jsonrpc: '2.0',
+        id,
+        error: { code: JsonRpcErrorCode.ServerNotInitialized, message },
+      });
     }
     return;
   }
@@ -63,7 +71,11 @@ async function handleJsonRpcMessage(msg) {
     const message = `Unknown method: ${method}`;
     postLog(`Error: ${message}`);
     if (id) {
-      self.postMessage({ jsonrpc: '2.0', id, error: { code: JsonRpcErrorCode.MethodNotFound, message } });
+      self.postMessage({
+        jsonrpc: '2.0',
+        id,
+        error: { code: JsonRpcErrorCode.MethodNotFound, message },
+      });
     }
     return;
   }
@@ -72,13 +84,21 @@ async function handleJsonRpcMessage(msg) {
     const result = await handler(params);
     postLog(`Finished: ${method}`);
     if (id) {
-      self.postMessage({ jsonrpc: '2.0', id, result: result !== undefined ? result : null });
+      self.postMessage({
+        jsonrpc: '2.0',
+        id,
+        result: result !== undefined ? result : null,
+      });
     }
   } catch (err) {
     const message = `${method} failed: ${err?.message ?? String(err)}`;
     postLog(`Error: ${message}`);
     if (id) {
-      self.postMessage({ jsonrpc: '2.0', id, error: { code: JsonRpcErrorCode.ServerError, message } });
+      self.postMessage({
+        jsonrpc: '2.0',
+        id,
+        error: { code: JsonRpcErrorCode.ServerError, message },
+      });
     }
   }
 }
