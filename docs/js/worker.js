@@ -72,7 +72,18 @@ async function handleJsonRpcMessage(msg) {
   postLog(`Received: ${method} (id:${id ?? '-'})`);
 
   // Methods that assume VFS / LSP presence: those under 'lsp/' and 'textDocument/'.
-  const requiresVfs = method.startsWith('lsp/') || method.startsWith('textDocument/');
+  
+  // Before:
+  // const requiresVfs = method.startsWith('lsp/') || method.startsWith('textDocument/');
+  
+  // After: initialize/ping/shutdown は VFS 不要にする
+  const requiresVfs =
+    method.startsWith('textDocument/') ||
+    (method.startsWith('lsp/') &&
+      !['lsp/initialize', 'lsp/ping', 'lsp/shutdown'].includes(method));
+  
+  
+  
   if (requiresVfs && !VfsCore.isReady()) {
     const message = 'VFS not ready. Call `vfs/ensureReady` first.';
     postLog(`Error: ${message}`);

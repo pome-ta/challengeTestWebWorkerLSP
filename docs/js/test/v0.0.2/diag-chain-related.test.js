@@ -109,3 +109,4 @@ console.log('diag-chain-related.test loaded');
     worker?.terminate();
   }
 })();
+
