@@ -67,16 +67,19 @@
       const getbtn = document.getElementById('getlog');
       getbtn.addEventListener('click', (e) => {
         eruda.show();
+        /*
         while (outdiv.firstChild) {
           outdiv.removeChild(outdiv.firstChild);
         }
+        */
         const erudaShadow = document.getElementById('eruda').shadowRoot;
         const lunaConsoleLogContents = erudaShadow.querySelectorAll(
           '.luna-console-log-content'
         );
-        lunaConsoleLogContents.forEach((content) =>
-          outdiv.appendChild(content.cloneNode(true))
-        );
+        lunaConsoleLogContents.forEach((content) =>{
+          //outdiv.appendChild(content.cloneNode(true));
+          outdiv.appendChild(content);
+        });
         eruda.hide();
       });
     </script>
