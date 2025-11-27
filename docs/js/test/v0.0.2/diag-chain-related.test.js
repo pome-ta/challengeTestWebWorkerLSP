@@ -26,9 +26,7 @@ console.log('diag-chain-related.test loaded');
     await sendRequest(worker, 'vfs/ensureReady');
     await sendRequest(worker, 'lsp/initialize', { capabilities: {} });
 
-    // 2) multi-file setup to produce a DiagnosticMessageChain with relatedInformation
-    //
-    // helper.ts: exports a type requiring number
+    // 2) multi-file setup: helper.ts + entry.ts
     const helperUri = 'file:///helper.ts';
     const helperContent = `
       export type NumBox = { value: number };
@@ -42,7 +40,6 @@ console.log('diag-chain-related.test loaded');
       },
     });
 
-    // entry.ts: imports NumBox but provides incompatible type → produces chain+relatedInformation
     const entryUri = 'file:///entry.ts';
     const entryContent = `
       import { NumBox } from "./helper";
@@ -68,13 +65,12 @@ console.log('diag-chain-related.test loaded');
     expect(published.diagnostics).to.be.an('array').with.lengthOf.at.least(1);
 
     const pubDiag = published.diagnostics[0];
-    const flattened = pubDiag.message; // string
+    const flattened = pubDiag.message;
 
     expect(flattened).to.be.a('string');
-    expect(flattened).to.include('not assignable'); // base assertion
-    expect(flattened).to.include('value');           // property involved
+    expect(flattened).to.include('not assignable');
 
-    // 4) Now request raw diagnostics (test-only)
+    // 4) Request raw diagnostics (test-only)
     const rawResult = await sendRequest(worker, 'lsp/_getRawDiagnostics', {
       uri: entryUri,
     });
@@ -84,7 +80,6 @@ console.log('diag-chain-related.test loaded');
     const rawDiag = rawResult.diagnostics[0];
     const messageText = rawDiag.messageText;
 
-    // rawDiag.messageText must be a DiagnosticMessageChain to include relatedInformation
     const isChain =
       messageText &&
       typeof messageText === 'object' &&
@@ -92,18 +87,7 @@ console.log('diag-chain-related.test loaded');
 
     expect(isChain).to.be.true;
 
-    // 5) assert relatedInformation exists in the raw chain
-    //
-    // In TS structure:
-    //   DiagnosticMessageChain = {
-    //     messageText: string,
-    //     category: number,
-    //     code: number,
-    //     next?: DiagnosticMessageChain[],
-    //     relatedInformation?: Diagnostic[]
-    //   }
-    //
-    // For multi-file type mismatch, TS often generates at least one relatedInformation item.
+    // 5) relatedInformation must exist
     expect(messageText.relatedInformation).to.exist;
     expect(messageText.relatedInformation).to.be.an('array');
     expect(messageText.relatedInformation.length).to.be.greaterThan(0);
@@ -111,12 +95,9 @@ console.log('diag-chain-related.test loaded');
     const related0 = messageText.relatedInformation[0];
     expect(related0).to.have.property('messageText');
 
-    // 6) Compare raw flatten vs published flatten
-    //
-    // Instead of re-implementing ts.flattenDiagnosticMessageText,
-    // we simply ensure that the flattened published message contains
-    // the relatedInformation inner messages.
+    // 6) Validate that the relatedInformation message is included in published flatten
     const relatedMessage = related0.messageText;
+
     if (typeof relatedMessage === 'string') {
       expect(flattened).to.include(relatedMessage);
     }
