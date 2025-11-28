@@ -1,7 +1,8 @@
 // core/lsp-core.js
 // v0.0.2.10
-// - Fix: flatten relatedInformation.messageText (TS DiagnosticMessageChain)
+// - Fix: uri->path normalization bug (startswith -> startsWith)
 // - LSP core for browser VFS
+// - relatedInformation flattening retained from previous change
 
 import ts from 'https://esm.sh/typescript';
 import { postLog } from '../util/logger.js';
@@ -346,9 +347,11 @@ class LspServer {
 
   #uriToPath(uri) {
     if (!uri) return '';
-    let path = String(uri).replace(/^file:\/\//, '');
-    if (!path.startswith('/')) path = `/${path}`;
-    return path;
+    const s = String(uri);
+    const stripped = s.replace(/^file:\/\//, '');
+    // [CHANGE] use correct JS method startsWith (was startswith -> crashed)
+    if (!stripped.startsWith('/')) return `/${stripped}`;
+    return stripped;
   }
 
   async getRawDiagnosticsForTest(uri) {
@@ -416,4 +419,3 @@ export const LspCore = {
     return await s.getRawDiagnosticsForTest(uri);
   },
 };
-
