@@ -10,7 +10,7 @@ import {
   addResult,
 } from './test-utils.js';
 
-console.log('diag-chain-raw.test loaded');
+console.log('🧩 diag-chain-raw.test loaded');
 
 (async () => {
   const testName =
