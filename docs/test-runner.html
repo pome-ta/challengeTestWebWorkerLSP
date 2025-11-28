@@ -49,6 +49,7 @@
     <div id="results">
       <ol id="testOrdered"></ol>
     </div>
+    <button id="copylog" style="padding: 1rem;">copy</button>
     <div
       id="outdiv"
       style="
@@ -65,8 +66,9 @@
     <script>
       const outdiv = document.getElementById('outdiv');
       const getbtn = document.getElementById('getlog');
+      const cpybtn = document.getElementById('copylog');
       getbtn.addEventListener('click', (e) => {
-        eruda.show();
+        //eruda.show();
         /*
         while (outdiv.firstChild) {
           outdiv.removeChild(outdiv.firstChild);
@@ -80,7 +82,12 @@
           //outdiv.appendChild(content.cloneNode(true));
           outdiv.appendChild(content);
         });
-        eruda.hide();
+        //eruda.hide();
+      });
+      cpybtn.addEventListener('click', (e) => {
+        const innerText = outdiv.innerText;
+        const copyblock = '```' + '\n' + innerText + '\n' + '```';
+        navigator.clipboard.writeText(copyblock).then();
       });
     </script>
   </body>
