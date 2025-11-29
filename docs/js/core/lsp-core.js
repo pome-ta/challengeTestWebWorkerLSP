@@ -1,5 +1,5 @@
 // core/lsp-core.js
-// v0.0.3.0-alpha
+// v0.0.2.10
 // - LSP core for browser VFS
 // - Uses core/diag-utils.js for flattening & mapping
 // - sanitizeCompilerOptions simplified (pattern C: default Bundler, no final-force)
@@ -8,7 +8,10 @@ import ts from 'https://esm.sh/typescript';
 import { postLog } from '../util/logger.js';
 import { VfsCore } from './vfs-core.js';
 import { sleep } from '../util/async-utils.js';
-import { mapTsDiagnosticToLsp, flattenDiagnosticMessage } from './diag-utils.js';
+import {
+  mapTsDiagnosticToLsp,
+  flattenDiagnosticMessage,
+} from './diag-utils.js';
 
 class LspServer {
   #env = null;
@@ -331,7 +334,8 @@ class LspServer {
               // Try to return JSON-safe subset; remove file objects
               return {
                 messageText: ri.messageText,
-                fileName: ri.file && ri.file.fileName ? ri.file.fileName : ri.file,
+                fileName:
+                  ri.file && ri.file.fileName ? ri.file.fileName : ri.file,
                 start: ri.start,
                 length: ri.length,
               };
