@@ -1,5 +1,5 @@
 // core/lsp-core.js
-// v0.0.3.0-alpha
+// v0.0.2.10
 // - LSP core for browser VFS
 // - Uses core/diag-utils.js for flattening & mapping
 // - sanitizeCompilerOptions simplified (pattern C: default Bundler, no final-force)
