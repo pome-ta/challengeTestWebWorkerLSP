@@ -1,13 +1,14 @@
 // core/lsp-core.js
-// v0.0.2.10
-// - Fix: uri->path normalization bug (startswith -> startsWith)
+// v0.0.3.0-alpha
 // - LSP core for browser VFS
-// - relatedInformation flattening retained from previous change
+// - Uses core/diag-utils.js for flattening & mapping
+// - sanitizeCompilerOptions simplified (pattern C: default Bundler, no final-force)
 
 import ts from 'https://esm.sh/typescript';
 import { postLog } from '../util/logger.js';
 import { VfsCore } from './vfs-core.js';
 import { sleep } from '../util/async-utils.js';
+import { mapTsDiagnosticToLsp, flattenDiagnosticMessage } from './diag-utils.js';
 
 class LspServer {
   #env = null;
@@ -21,6 +22,7 @@ class LspServer {
   }
 
   #sanitizeCompilerOptions(incoming = {}) {
+    // パターンC: default は Bundler。最終強制なし。
     const defaults = VfsCore.getDefaultCompilerOptions
       ? VfsCore.getDefaultCompilerOptions()
       : {
@@ -32,6 +34,7 @@ class LspServer {
 
     const opts = { ...defaults, ...(incoming || {}) };
 
+    // 1) allowImportingTsExtensions -> noEmit 強制
     if (opts.allowImportingTsExtensions && !opts.noEmit) {
       postLog(
         'sanitizeCompilerOptions: enabling noEmit because allowImportingTsExtensions requested'
@@ -39,6 +42,8 @@ class LspServer {
       opts.noEmit = true;
     }
 
+    // 2) resolvePackageJson* が有効なら moduleResolution は bundler/node16/nodenext のいずれか必須
+    //    デフォルトは bundler なので override された場合のみ発火する
     const needsNodeLike =
       opts.resolvePackageJsonExports === true ||
       opts.resolvePackageJsonImports === true;
@@ -58,6 +63,7 @@ class LspServer {
       }
     }
 
+    // 3) 危険な compilerOptions を除去
     const unsafeFlags = [
       'incremental',
       'tsBuildInfoFile',
@@ -101,7 +107,7 @@ class LspServer {
       },
       serverInfo: {
         name: 'WebWorker-LSP-Server',
-        version: '0.0.2.10',
+        version: '0.0.3',
       },
     };
   }
@@ -259,7 +265,7 @@ class LspServer {
       postLog(`Diagnostics detail for ${path}:`);
       for (const d of all) {
         try {
-          const msg = ts.flattenDiagnosticMessageText(d.messageText, '\n');
+          const msg = flattenDiagnosticMessage(d);
           postLog(
             `  - code:${d.code} start:${d.start ?? '-'} len:${
               d.length ?? '-'
@@ -271,7 +277,7 @@ class LspServer {
       }
     }
 
-    const diagnostics = all.map((d) => this.#tsDiagToLsp(d, path, program));
+    const diagnostics = all.map((d) => mapTsDiagnosticToLsp(d, path, program));
 
     postLog(`Publishing ${diagnostics.length} diagnostics for ${path}`);
     self.postMessage({
@@ -289,71 +295,17 @@ class LspServer {
     });
   }
 
-  #tsDiagToLsp(diag, path, program) {
-    const sourceFile = program?.getSourceFile(path);
-    const start = diag.start ?? 0;
-    const length = diag.length ?? 0;
-    const startPos = sourceFile
-      ? ts.getLineAndCharacterOfPosition(sourceFile, start)
-      : { line: 0, character: 0 };
-    const endPos = sourceFile
-      ? ts.getLineAndCharacterOfPosition(sourceFile, start + length)
-      : { line: 0, character: 0 };
-
-    const message = ts.flattenDiagnosticMessageText(diag.messageText, '\n');
-
-    // [CHANGE] flatten relatedInformation.messageText
-    let related = undefined;
-    if (diag.relatedInformation && Array.isArray(diag.relatedInformation)) {
-      related = diag.relatedInformation.map((info) => {
-        const relatedMessage = ts.flattenDiagnosticMessageText(
-          info.messageText,
-          '\n'
-        );
-        const f = info.file;
-        const rStart = f
-          ? ts.getLineAndCharacterOfPosition(f, info.start ?? 0)
-          : { line: 0, character: 0 };
-        const rEnd = f
-          ? ts.getLineAndCharacterOfPosition(
-              f,
-              (info.start ?? 0) + (info.length ?? 0)
-            )
-          : { line: 0, character: 0 };
-        const relatedPath = f?.fileName
-          ? String(f.fileName).startsWith('/')
-            ? f.fileName
-            : `/${f.fileName}`
-          : path;
-        return {
-          location: {
-            uri: `file://${relatedPath}`,
-            range: { start: rStart, end: rEnd },
-          },
-          message: relatedMessage,
-        };
-      });
-    }
-
-    return {
-      range: { start: startPos, end: endPos },
-      message,
-      severity: typeof diag.category === 'number' ? diag.category + 1 : 1,
-      source: 'ts',
-      code: diag.code,
-      ...(related ? { relatedInformation: related } : {}),
-    };
-  }
-
   #uriToPath(uri) {
     if (!uri) return '';
-    const s = String(uri);
-    const stripped = s.replace(/^file:\/\//, '');
-    // [CHANGE] use correct JS method startsWith (was startswith -> crashed)
-    if (!stripped.startsWith('/')) return `/${stripped}`;
-    return stripped;
+    let path = String(uri).replace(/^file:\/\//, '');
+    if (!path.startsWith('/')) path = `/${path}`;
+    return path;
   }
 
+  // ----------------------------
+  // Test-only API: raw diagnostics
+  // Returns JSON-safe subset of Diagnostic objects
+  // ----------------------------
   async getRawDiagnosticsForTest(uri) {
     if (!this.#env) {
       postLog('getRawDiagnosticsForTest called but env is not initialized');
@@ -366,13 +318,25 @@ class LspServer {
       this.#env.languageService.getSyntacticDiagnostics(path) || [];
     const all = [...syntactic, ...semantic];
 
+    // Map to JSON-safe structure; preserve messageText which may be chain object
     const safe = all.map((d) => {
       return {
         code: d.code,
         category: d.category,
         start: d.start,
         length: d.length,
-        messageText: d.messageText,
+        messageText: d.messageText, // might be string or DiagnosticMessageChain (object)
+        relatedInformation: Array.isArray(d.relatedInformation)
+          ? d.relatedInformation.map((ri) => {
+              // Try to return JSON-safe subset; remove file objects
+              return {
+                messageText: ri.messageText,
+                fileName: ri.file && ri.file.fileName ? ri.file.fileName : ri.file,
+                start: ri.start,
+                length: ri.length,
+              };
+            })
+          : undefined,
       };
     });
 
@@ -414,6 +378,7 @@ export const LspCore = {
     await s.publishDiagnostics(uri);
   },
 
+  // Test-only RPC consumer can call this
   getRawDiagnosticsForTest: async (uri) => {
     const s = await getServer();
     return await s.getRawDiagnosticsForTest(uri);
