@@ -41,7 +41,13 @@
   <body>
     <button
       id="getlog"
-      style="width: 88%; height: 4rem; display: block; margin: 0 auto; margin: 1rem auto;"
+      style="
+        width: 88%;
+        height: 4rem;
+        display: block;
+        margin: 0 auto;
+        margin: 1rem auto;
+      "
     >
       get log
     </button>
@@ -49,7 +55,7 @@
     <div id="results">
       <ol id="testOrdered"></ol>
     </div>
-    <button id="copylog" style="padding: 1rem;">copy</button>
+    <button id="copylog" style="padding: 1rem">copy</button>
     <div
       id="outdiv"
       style="
@@ -78,7 +84,7 @@
         const lunaConsoleLogContents = erudaShadow.querySelectorAll(
           '.luna-console-log-content'
         );
-        lunaConsoleLogContents.forEach((content) =>{
+        lunaConsoleLogContents.forEach((content) => {
           //outdiv.appendChild(content.cloneNode(true));
           outdiv.appendChild(content);
         });

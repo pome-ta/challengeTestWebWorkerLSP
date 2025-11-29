@@ -8,7 +8,10 @@ import ts from 'https://esm.sh/typescript';
 import { postLog } from '../util/logger.js';
 import { VfsCore } from './vfs-core.js';
 import { sleep } from '../util/async-utils.js';
-import { mapTsDiagnosticToLsp, flattenDiagnosticMessage } from './diag-utils.js';
+import {
+  mapTsDiagnosticToLsp,
+  flattenDiagnosticMessage,
+} from './diag-utils.js';
 
 class LspServer {
   #env = null;
@@ -331,7 +334,8 @@ class LspServer {
               // Try to return JSON-safe subset; remove file objects
               return {
                 messageText: ri.messageText,
-                fileName: ri.file && ri.file.fileName ? ri.file.fileName : ri.file,
+                fileName:
+                  ri.file && ri.file.fileName ? ri.file.fileName : ri.file,
                 start: ri.start,
                 length: ri.length,
               };

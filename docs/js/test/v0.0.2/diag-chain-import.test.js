@@ -117,17 +117,14 @@ console.log('🧩 diag-chain-import.test loaded');
 
     // messageText は string か TS の messageChain
     const isChain =
-      msgText &&
-      typeof msgText === 'object' &&
-      'messageText' in msgText;
+      msgText && typeof msgText === 'object' && 'messageText' in msgText;
 
     if (!(isChain || typeof msgText === 'string')) {
       throw new Error('Unexpected raw diagnostic messageText type.');
     }
 
     // root message text を抽出
-    const rootMsg =
-      typeof msgText === 'string' ? msgText : msgText.messageText;
+    const rootMsg = typeof msgText === 'string' ? msgText : msgText.messageText;
 
     // flatten が root message を含んでいるか検証
     if (!flattened.includes(rootMsg)) {
@@ -143,4 +140,3 @@ console.log('🧩 diag-chain-import.test loaded');
     worker?.terminate();
   }
 })();
-

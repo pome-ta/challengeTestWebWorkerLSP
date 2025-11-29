@@ -128,7 +128,10 @@ export function mapTsDiagnosticToLsp(diag, path, program) {
 
   // Map relatedInformation -> LSP relatedInformation (only when location can be formed)
   try {
-    if (Array.isArray(diag.relatedInformation) && diag.relatedInformation.length > 0) {
+    if (
+      Array.isArray(diag.relatedInformation) &&
+      diag.relatedInformation.length > 0
+    ) {
       const riList = [];
       for (const ri of diag.relatedInformation) {
         try {
@@ -139,7 +142,11 @@ export function mapTsDiagnosticToLsp(diag, path, program) {
             end: { line: 0, character: 0 },
           };
 
-          if (ri?.file && typeof ri.file === 'object' && typeof ri.file.fileName === 'string') {
+          if (
+            ri?.file &&
+            typeof ri.file === 'object' &&
+            typeof ri.file.fileName === 'string'
+          ) {
             // TS SourceFile case
             riUri = _toFileUri(ri.file.fileName);
             if (typeof ri.start === 'number') {
@@ -170,7 +177,11 @@ export function mapTsDiagnosticToLsp(diag, path, program) {
             // (LSP relatedInformation expects a `location`); keep the main message unchanged.
           }
         } catch (e) {
-          postLog(`diag-utils.mapTsDiagnosticToLsp: failed mapping a relatedInformation entry: ${String(e?.message ?? e)}`);
+          postLog(
+            `diag-utils.mapTsDiagnosticToLsp: failed mapping a relatedInformation entry: ${String(
+              e?.message ?? e
+            )}`
+          );
           // continue mapping others
         }
       }
@@ -180,7 +191,11 @@ export function mapTsDiagnosticToLsp(diag, path, program) {
       }
     }
   } catch (e) {
-    postLog(`diag-utils.mapTsDiagnosticToLsp: unexpected error mapping relatedInformation: ${String(e?.message ?? e)}`);
+    postLog(
+      `diag-utils.mapTsDiagnosticToLsp: unexpected error mapping relatedInformation: ${String(
+        e?.message ?? e
+      )}`
+    );
   }
 
   return lsp;

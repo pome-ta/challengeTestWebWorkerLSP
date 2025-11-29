@@ -92,9 +92,7 @@ console.log('🧩 diag-chain-related.test loaded');
     // よって、flattened に chain のテキストが含まれていることだけを確認する
 
     const chainRootMsg =
-      typeof messageText === 'string'
-        ? messageText
-        : messageText.messageText;
+      typeof messageText === 'string' ? messageText : messageText.messageText;
 
     expect(flattened).to.include(chainRootMsg);
 
