@@ -1,5 +1,5 @@
 // core/diag-utils.js
-// v0.0.3.0-alpha
+// v0.0.2.12
 // - Diagnostic utilities centered: flattening and TS->LSP mapping
 // - Exports:
 //    - flattenDiagnosticMessage(diag, ts) -> string

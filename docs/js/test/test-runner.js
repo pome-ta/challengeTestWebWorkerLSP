@@ -1,5 +1,5 @@
 // test/test-runner.js
-// v0.0.2.11
+// v0.0.2.12
 
 console.log('🚀 test-runner.js loaded');
 
@@ -14,4 +14,5 @@ console.log('🚀 test-runner.js loaded');
 //import './v0.0.2/diag-chain-raw.test.js';
 //import './v0.0.2/diag-chain-related.test.js';
 import './v0.0.2/diag-chain-import.test.js';
+//import './v0.0.2/diag-utils.unit.test.js';
 
