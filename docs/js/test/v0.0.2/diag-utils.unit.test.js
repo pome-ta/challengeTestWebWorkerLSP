@@ -38,7 +38,7 @@ function runFlattenTests() {
   // A3: chain with next
   {
     const d = {
-      messageText: mkChain('a', [mkChain('b')])
+      messageText: mkChain('a', [mkChain('b')]),
     };
     const out = DiagUtils.flattenDiagnosticMessage(d);
     assertEq(out, 'a\nb', 'multi-level chain');
@@ -55,7 +55,9 @@ function runFlattenTests() {
     }
     const d = { messageText: n };
     const out = DiagUtils.flattenDiagnosticMessage(d, { maxDepth: 20 });
-    const endsWith = out.endsWith('[...diagnostic message truncated due to depth]');
+    const endsWith = out.endsWith(
+      '[...diagnostic message truncated due to depth]'
+    );
     assertEq(endsWith, true, 'depth truncation');
   }
 
@@ -75,10 +77,7 @@ function runFlattenTests() {
   {
     const d = {
       messageText: 'main',
-      relatedInformation: [
-        { messageText: 'r1' },
-        { messageText: 'r2' }
-      ]
+      relatedInformation: [{ messageText: 'r1' }, { messageText: 'r2' }],
     };
     const out = DiagUtils.flattenDiagnosticMessage(d);
     const ok =
@@ -93,10 +92,10 @@ function runFlattenTests() {
   {
     const d = {
       messageText: 'main',
-      relatedInformation: [{ messageText: 'r1' }]
+      relatedInformation: [{ messageText: 'r1' }],
     };
     const out = DiagUtils.flattenDiagnosticMessage(d, {
-      includeRelatedInMessage: false
+      includeRelatedInMessage: false,
     });
     assertEq(out, 'main', 'relatedInformation excluded');
   }
@@ -113,7 +112,7 @@ function runMapTests() {
         fileName: p,
         text: '',
       };
-    }
+    },
   };
 
   // B1: basic transform
@@ -123,7 +122,7 @@ function runMapTests() {
       start: 0,
       length: 1,
       category: 1,
-      code: 999
+      code: 999,
     };
     const out = DiagUtils.mapTsDiagnosticToLsp(d, '/entry.ts', fakeProgram);
     const ok =
@@ -151,9 +150,9 @@ function runMapTests() {
         {
           messageText: 'r1',
           file: { fileName: '/f.ts' },
-          start: 0
-        }
-      ]
+          start: 0,
+        },
+      ],
     };
     const out = DiagUtils.mapTsDiagnosticToLsp(d, '/entry.ts', fakeProgram);
     const ok =
@@ -178,4 +177,3 @@ function runMapTests() {
     addResult(testName, false, err.message);
   }
 })();
-
