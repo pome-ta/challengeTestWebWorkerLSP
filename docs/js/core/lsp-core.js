@@ -1,17 +1,15 @@
 // core/lsp-core.js
-// v0.0.2.10
-// - LSP core for browser VFS
-// - Uses core/diag-utils.js for flattening & mapping
-// - sanitizeCompilerOptions simplified (pattern C: default Bundler, no final-force)
+// v0.0.2.12
+
 
 import ts from 'https://esm.sh/typescript';
-import { postLog } from '../util/logger.js';
 import { VfsCore } from './vfs-core.js';
 import { sleep } from '../util/async-utils.js';
 import {
   mapTsDiagnosticToLsp,
   flattenDiagnosticMessage,
 } from './diag-utils.js';
+import { postLog } from '../util/logger.js';
 
 class LspServer {
   #env = null;
@@ -305,11 +303,13 @@ class LspServer {
     return path;
   }
 
+
+  /*
   // ----------------------------
   // Test-only API: raw diagnostics
   // Returns JSON-safe subset of Diagnostic objects
   // ----------------------------
-  async getRawDiagnosticsForTest(uri) {
+  async getRawDiagnosticsForTest(uri) (
     if (!this.#env) {
       postLog('getRawDiagnosticsForTest called but env is not initialized');
       return { diagnostics: [] };
@@ -346,11 +346,14 @@ class LspServer {
 
     return { diagnostics: safe };
   }
+  */
 }
 
 let server = null;
 async function getServer() {
-  if (!server) server = new LspServer();
+  if (!server) {
+    server = new LspServer();
+  }
   return server;
 }
 
@@ -382,9 +385,11 @@ export const LspCore = {
     await s.publishDiagnostics(uri);
   },
 
+  /*
   // Test-only RPC consumer can call this
   getRawDiagnosticsForTest: async (uri) => {
     const s = await getServer();
     return await s.getRawDiagnosticsForTest(uri);
   },
+  */
 };

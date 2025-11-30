@@ -1,18 +1,17 @@
-// worker.js (A policy: minimal, robust, standard-compliant)
+// worker.js
+// v0.0.2.12
+
+
+import { VfsCore } from './core/vfs-core.js';
+import { LspCore } from './core/lsp-core.js';
+import { JsonRpcErrorCode } from './core/error-codes.js';
 
 import { postLog, setDebug } from './util/logger.js';
-import { VfsCore } from './core/vfs-core.js';
-import { JsonRpcErrorCode } from './core/error-codes.js';
-import { LspCore } from './core/lsp-core.js';
 
 // debug:on by default for test visibility
 setDebug(true);
 
-/* =============================================================
-   Handlers (A: minimal)
-   - No custom non-LSP methods except test-only `_getRawDiagnostics`
-   - No side-channel helpers
-   ============================================================= */
+
 const handlers = {
   // VFS lifecycle
   'vfs/ensureReady': async () => await VfsCore.ensureReady(),
@@ -33,9 +32,6 @@ const handlers = {
   'textDocument/didChange': async (params) => await LspCore.didChange(params),
   'textDocument/didClose': async (params) => await LspCore.didClose(params),
 
-  // Test-only utility (必要なので残す)
-  'lsp/_getRawDiagnostics': async (params) =>
-    await LspCore.getRawDiagnosticsForTest(params?.uri),
 };
 
 /* =============================================================
@@ -61,16 +57,13 @@ async function handleJsonRpcMessage(msg) {
 
   postLog(`Received: ${method} (id:${id ?? '-'})`);
 
-  /* -----------------------------------------------
-     A 方針: VFS gating を最小限に
-     - initialize/ping/shutdown は VFS 不要
-     - textDocument/* とその他 LSP メソッドは VFS 必須
-     ----------------------------------------------- */
+  // memo: ここのコネコネはあとで確認（なんか無駄に処理してそう）
   const requiresVfs =
     method.startsWith('textDocument/') ||
     (method.startsWith('lsp/') &&
       !['lsp/initialize', 'lsp/ping', 'lsp/shutdown'].includes(method));
 
+  // note: VFS が準備できてるか確認
   if (requiresVfs && !VfsCore.isReady()) {
     const message = 'VFS not ready. Call `vfs/ensureReady` first.';
     postLog(`Error: ${message}`);
@@ -150,8 +143,7 @@ self.addEventListener('message', async (event) => {
   postLog(`Received unknown message format: ${JSON.stringify(data)}`);
 });
 
-/* =============================================================
-   Worker Ready (A: keep)
-   ============================================================= */
+// memo: ここ残すか確認する
 postLog('Worker loaded and ready.');
 self.postMessage({ jsonrpc: '2.0', method: 'worker/ready' });
+
