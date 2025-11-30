@@ -1,7 +1,6 @@
 // core/lsp-core.js
 // v0.0.2.12
 
-
 import ts from 'https://esm.sh/typescript';
 import { VfsCore } from './vfs-core.js';
 import { sleep } from '../util/async-utils.js';
