@@ -27,7 +27,9 @@ function formatTime() {
  * - payload は JSON-RPC notification 形式
  */
 export const postLog = (message) => {
-  if (!isDebugEnabled) return;
+  if (!isDebugEnabled) {
+    return;
+  }
   try {
     self.postMessage({
       jsonrpc: '2.0',

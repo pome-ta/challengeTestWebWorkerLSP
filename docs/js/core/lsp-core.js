@@ -107,7 +107,7 @@ class LspServer {
       },
       serverInfo: {
         name: 'WebWorker-LSP-Server',
-        version: '0.0.3',
+        version: '0.0.2',
       },
     };
   }
@@ -301,7 +301,6 @@ class LspServer {
     if (!path.startsWith('/')) path = `/${path}`;
     return path;
   }
-
 
   /*
   // ----------------------------
