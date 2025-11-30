@@ -10,7 +10,8 @@ import {
   waitForNotification,
   addResult,
 } from './test-utils.js';
-import ts from 'https://esm.sh/typescript';
+
+console.log('🧩 worker-diagnostics-flatten.test loaded');
 
 (async () => {
   const testName =

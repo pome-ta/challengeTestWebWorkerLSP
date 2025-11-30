@@ -1,7 +1,6 @@
 // worker.js
 // v0.0.2.12
 
-
 import { VfsCore } from './core/vfs-core.js';
 import { LspCore } from './core/lsp-core.js';
 import { JsonRpcErrorCode } from './core/error-codes.js';
@@ -146,4 +145,3 @@ self.addEventListener('message', async (event) => {
 // Announce ready
 postLog('Worker loaded and ready.');
 self.postMessage({ jsonrpc: '2.0', method: 'worker/ready' });
-

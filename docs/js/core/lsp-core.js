@@ -5,7 +5,6 @@ import ts from 'https://esm.sh/typescript';
 import { VfsCore } from './vfs-core.js';
 import { postLog } from '../util/logger.js';
 
-
 class LspServer {
   #env = null;
   #openFiles = new Map();
@@ -35,9 +34,7 @@ class LspServer {
     const incoming = params.initializationOptions?.compilerOptions || {};
     this.#compilerOptions = this.#mergeCompilerOptions(incoming);
 
-    postLog(
-      `LSP initialize (opts): ${JSON.stringify(this.#compilerOptions)}`
-    );
+    postLog(`LSP initialize (opts): ${JSON.stringify(this.#compilerOptions)}`);
 
     await VfsCore.ensureReady();
 
@@ -206,7 +203,10 @@ class LspServer {
 
     // Map relatedInformation -> LSP relatedInformation when location available
     try {
-      if (Array.isArray(diag.relatedInformation) && diag.relatedInformation.length > 0) {
+      if (
+        Array.isArray(diag.relatedInformation) &&
+        diag.relatedInformation.length > 0
+      ) {
         const riList = [];
         for (const ri of diag.relatedInformation) {
           try {
@@ -216,8 +216,16 @@ class LspServer {
               end: { line: 0, character: 0 },
             };
 
-            if (ri?.file && typeof ri.file === 'object' && typeof ri.file.fileName === 'string') {
-              riUri = `file://${ri.file.fileName.startsWith('/') ? ri.file.fileName : ri.file.fileName}`;
+            if (
+              ri?.file &&
+              typeof ri.file === 'object' &&
+              typeof ri.file.fileName === 'string'
+            ) {
+              riUri = `file://${
+                ri.file.fileName.startsWith('/')
+                  ? ri.file.fileName
+                  : ri.file.fileName
+              }`;
               if (typeof ri.start === 'number') {
                 const pos = ts.getLineAndCharacterOfPosition(ri.file, ri.start);
                 riRange = {
@@ -269,11 +277,15 @@ class LspServer {
     try {
       program = this.#env.languageService.getProgram();
     } catch (e) {
-      postLog(`getProgram() failed before diagnostics: ${e?.message ?? String(e)}`);
+      postLog(
+        `getProgram() failed before diagnostics: ${e?.message ?? String(e)}`
+      );
     }
 
-    const syntactic = this.#env.languageService.getSyntacticDiagnostics(path) || [];
-    const semantic = this.#env.languageService.getSemanticDiagnostics(path) || [];
+    const syntactic =
+      this.#env.languageService.getSyntacticDiagnostics(path) || [];
+    const semantic =
+      this.#env.languageService.getSemanticDiagnostics(path) || [];
     const all = [...syntactic, ...semantic];
 
     if (all.length > 0) {
@@ -282,7 +294,9 @@ class LspServer {
         try {
           const msg = ts.flattenDiagnosticMessageText(d.messageText, '\n');
           postLog(
-            `  - code:${d.code} start:${d.start ?? '-'} len:${d.length ?? '-'} msg:${msg}`
+            `  - code:${d.code} start:${d.start ?? '-'} len:${
+              d.length ?? '-'
+            } msg:${msg}`
           );
         } catch (e) {
           postLog(`  - (failed to stringify diag) ${String(e?.message ?? e)}`);
@@ -290,7 +304,9 @@ class LspServer {
       }
     }
 
-    const diagnostics = all.map((d) => this.#mapTsDiagnosticToLsp(d, path, program));
+    const diagnostics = all.map((d) =>
+      this.#mapTsDiagnosticToLsp(d, path, program)
+    );
 
     postLog(`Publishing ${diagnostics.length} diagnostics for ${path}`);
     self.postMessage({
@@ -325,7 +341,7 @@ async function getServer() {
   if (!server) {
     server = new LspServer();
   }
-  
+
   return server;
 }
 
