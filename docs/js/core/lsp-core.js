@@ -309,16 +309,23 @@ class LspServer {
   }
 
   #uriToPath(uri) {
-    if (!uri) return '';
+    if (!uri) {
+      return '';
+    }
     let path = String(uri).replace(/^file:\/\//, '');
-    if (!path.startsWith('/')) path = `/${path}`;
+    if (!path.startsWith('/')) {
+      path = `/${path}`;
+    }
     return path;
   }
 }
 
 let server = null;
 async function getServer() {
-  if (!server) server = new LspServer();
+  if (!server) {
+    server = new LspServer();
+  }
+  
   return server;
 }
 
