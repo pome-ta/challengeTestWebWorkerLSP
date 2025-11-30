@@ -3,26 +3,23 @@
 
 import ts from 'https://esm.sh/typescript';
 import { VfsCore } from './vfs-core.js';
-import { sleep } from '../util/async-utils.js';
-import {
-  mapTsDiagnosticToLsp,
-  flattenDiagnosticMessage,
-} from './diag-utils.js';
 import { postLog } from '../util/logger.js';
+
 
 class LspServer {
   #env = null;
   #openFiles = new Map();
   #compilerOptions = {};
-  #diagTimers = new Map();
-  #diagnosticDebounceMs = 300;
 
   constructor() {
     postLog('LspServer instance created');
   }
 
-  #sanitizeCompilerOptions(incoming = {}) {
-    // パターンC: default は Bundler。最終強制なし。
+  /**
+   * Minimal compiler options merge: take defaults and shallow-merge incoming.
+   * Avoid heavy sanitization here; keep small and predictable.
+   */
+  #mergeCompilerOptions(incoming = {}) {
     const defaults = VfsCore.getDefaultCompilerOptions
       ? VfsCore.getDefaultCompilerOptions()
       : {
@@ -31,71 +28,20 @@ class LspServer {
           moduleResolution: ts.ModuleResolutionKind.Bundler,
           strict: true,
         };
-
-    const opts = { ...defaults, ...(incoming || {}) };
-
-    // 1) allowImportingTsExtensions -> noEmit 強制
-    if (opts.allowImportingTsExtensions && !opts.noEmit) {
-      postLog(
-        'sanitizeCompilerOptions: enabling noEmit because allowImportingTsExtensions requested'
-      );
-      opts.noEmit = true;
-    }
-
-    // 2) resolvePackageJson* が有効なら moduleResolution は bundler/node16/nodenext のいずれか必須
-    //    デフォルトは bundler なので override された場合のみ発火する
-    const needsNodeLike =
-      opts.resolvePackageJsonExports === true ||
-      opts.resolvePackageJsonImports === true;
-
-    if (needsNodeLike) {
-      const mr = opts.moduleResolution;
-      const valid =
-        mr === ts.ModuleResolutionKind.Bundler ||
-        mr === ts.ModuleResolutionKind.Node16 ||
-        mr === ts.ModuleResolutionKind.NodeNext;
-
-      if (!valid) {
-        postLog(
-          `sanitizeCompilerOptions: resolvePackageJson* requires node-like resolution; fixing moduleResolution->Bundler`
-        );
-        opts.moduleResolution = ts.ModuleResolutionKind.Bundler;
-      }
-    }
-
-    // 3) 危険な compilerOptions を除去
-    const unsafeFlags = [
-      'incremental',
-      'tsBuildInfoFile',
-      'outDir',
-      'rootDir',
-      'outFile',
-      'composite',
-    ];
-    for (const f of unsafeFlags) {
-      if (f in opts) {
-        postLog(
-          `sanitizeCompilerOptions: removing possibly-unsafe option "${f}"`
-        );
-        delete opts[f];
-      }
-    }
-
-    return opts;
+    return Object.assign({}, defaults, incoming || {});
   }
 
   async initialize(params = {}) {
     const incoming = params.initializationOptions?.compilerOptions || {};
-    this.#compilerOptions = this.#sanitizeCompilerOptions(incoming);
+    this.#compilerOptions = this.#mergeCompilerOptions(incoming);
 
     postLog(
-      `LSP initialize (sanitized opts): ${JSON.stringify(
-        this.#compilerOptions
-      )}`
+      `LSP initialize (opts): ${JSON.stringify(this.#compilerOptions)}`
     );
 
     await VfsCore.ensureReady();
 
+    // Create empty environment (no root files yet)
     this.#env = VfsCore.createEnvironment(this.#compilerOptions, [], {});
     postLog('LspServer initialized, env created.');
   }
@@ -119,7 +65,8 @@ class LspServer {
 
     this.#openFiles.set(uri, { text, version });
     await this.#recreateEnv();
-    this.#scheduleDiagnostics(uri);
+    // publish immediately (no debounce)
+    await this.publishDiagnostics(uri);
   }
 
   async didChange(params) {
@@ -135,7 +82,7 @@ class LspServer {
 
     this.#openFiles.set(uri, { text, version });
     await this.#recreateEnv();
-    this.#scheduleDiagnostics(uri);
+    await this.publishDiagnostics(uri);
   }
 
   async didClose(params) {
@@ -145,9 +92,14 @@ class LspServer {
 
     this.#openFiles.delete(uri);
     await this.#recreateEnv();
+    // clear diagnostics immediately
     this.#clearDiagnostics(uri);
   }
 
+  /**
+   * Recreate the VFS environment from currently open files.
+   * Simplified: no retry loop, assume VfsCore.createEnvironment is robust.
+   */
   async #recreateEnv() {
     const rootFiles = [];
     const initialFiles = {};
@@ -165,6 +117,7 @@ class LspServer {
         initialFiles
       );
 
+      // Ensure content applied
       for (const [path, content] of Object.entries(initialFiles)) {
         try {
           if (this.#env.getSourceFile && this.#env.getSourceFile(path)) {
@@ -179,44 +132,13 @@ class LspServer {
         }
       }
 
-      let program;
+      // Try to prime the program; if it fails, we still continue (logs)
       try {
-        program = this.#env.languageService.getProgram();
+        this.#env.languageService.getProgram();
       } catch (e) {
         postLog(
           `getProgram() during recreateEnv failed: ${e?.message ?? String(e)}`
         );
-      }
-
-      const maxRetries = 5;
-      const retryDelayMs = 30;
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        const missing = [];
-        if (program) {
-          for (const p of rootFiles) {
-            if (!program.getSourceFile(p)) missing.push(p);
-          }
-        } else {
-          missing.push(...rootFiles);
-        }
-
-        if (missing.length === 0) break;
-
-        if (attempt === maxRetries) {
-          postLog(
-            `recreateEnv: program missing files after retries: ${missing.join(
-              ', '
-            )}`
-          );
-          break;
-        }
-
-        await sleep(retryDelayMs * (attempt + 1));
-        try {
-          program = this.#env.languageService.getProgram();
-        } catch (e) {
-          postLog(`getProgram() retry failed: ${e?.message ?? String(e)}`);
-        }
       }
 
       postLog(`recreateEnv done; roots: [${rootFiles.join(', ')}]`);
@@ -226,19 +148,116 @@ class LspServer {
     }
   }
 
-  #scheduleDiagnostics(uri) {
-    if (this.#diagTimers.has(uri)) {
-      clearTimeout(this.#diagTimers.get(uri));
+  /**
+   * Map TS Diagnostic -> LSP Diagnostic (standards-aligned).
+   * - message uses ts.flattenDiagnosticMessageText
+   * - relatedInformation mapped only when file+start available
+   */
+  #mapTsDiagnosticToLsp(diag, path, program) {
+    const start = typeof diag.start === 'number' ? diag.start : 0;
+    const length = typeof diag.length === 'number' ? diag.length : 0;
+
+    let sourceFile = null;
+    try {
+      sourceFile = program?.getSourceFile(path) ?? null;
+    } catch (e) {
+      sourceFile = null;
     }
-    const timer = setTimeout(() => {
-      this.publishDiagnostics(uri).catch((e) =>
-        postLog(`publishDiagnostics error: ${e?.message ?? String(e)}`)
-      );
-      this.#diagTimers.delete(uri);
-    }, this.#diagnosticDebounceMs);
-    this.#diagTimers.set(uri, Number(timer));
+
+    const startPos =
+      sourceFile && typeof start === 'number'
+        ? ts.getLineAndCharacterOfPosition(sourceFile, start)
+        : { line: 0, character: 0 };
+
+    const endPos =
+      sourceFile && typeof start === 'number' && typeof length === 'number'
+        ? ts.getLineAndCharacterOfPosition(sourceFile, start + length)
+        : { line: startPos.line, character: startPos.character };
+
+    const message = ts.flattenDiagnosticMessageText(diag.messageText, '\n');
+
+    // Severity mapping: TS -> LSP
+    let severity = 1; // default Error
+    if (typeof diag.category === 'number') {
+      switch (diag.category) {
+        case ts.DiagnosticCategory.Error:
+          severity = 1;
+          break;
+        case ts.DiagnosticCategory.Warning:
+          severity = 2;
+          break;
+        case ts.DiagnosticCategory.Suggestion:
+          severity = 3;
+          break;
+        case ts.DiagnosticCategory.Message:
+        default:
+          severity = 3;
+          break;
+      }
+    }
+
+    const lsp = {
+      range: { start: startPos, end: endPos },
+      message,
+      severity,
+      source: 'ts',
+      code: diag.code,
+    };
+
+    // Map relatedInformation -> LSP relatedInformation when location available
+    try {
+      if (Array.isArray(diag.relatedInformation) && diag.relatedInformation.length > 0) {
+        const riList = [];
+        for (const ri of diag.relatedInformation) {
+          try {
+            let riUri = null;
+            let riRange = {
+              start: { line: 0, character: 0 },
+              end: { line: 0, character: 0 },
+            };
+
+            if (ri?.file && typeof ri.file === 'object' && typeof ri.file.fileName === 'string') {
+              riUri = `file://${ri.file.fileName.startsWith('/') ? ri.file.fileName : ri.file.fileName}`;
+              if (typeof ri.start === 'number') {
+                const pos = ts.getLineAndCharacterOfPosition(ri.file, ri.start);
+                riRange = {
+                  start: { line: pos.line, character: pos.character },
+                  end: { line: pos.line, character: pos.character },
+                };
+              }
+            } else if (ri?.file && typeof ri.file === 'string') {
+              riUri = `file://${ri.file.startsWith('/') ? ri.file : ri.file}`;
+              // cannot compute line/char without SourceFile
+            }
+
+            const riMsg = ts.flattenDiagnosticMessageText(ri.messageText, '\n');
+
+            if (riUri) {
+              riList.push({
+                location: { uri: riUri, range: riRange },
+                message: riMsg,
+              });
+            }
+          } catch (e) {
+            postLog(`map relatedInformation error: ${String(e?.message ?? e)}`);
+            // continue with other relatedInformation
+          }
+        }
+
+        if (riList.length > 0) {
+          lsp.relatedInformation = riList;
+        }
+      }
+    } catch (e) {
+      postLog(`relatedInformation mapping failed: ${String(e?.message ?? e)}`);
+    }
+
+    return lsp;
   }
 
+  /**
+   * Publish diagnostics for a given uri (immediate, no debounce).
+   */
   async publishDiagnostics(uri) {
     if (!this.#env) {
       postLog('publishDiagnostics called but env is not initialized');
@@ -250,26 +269,20 @@ class LspServer {
     try {
       program = this.#env.languageService.getProgram();
     } catch (e) {
-      postLog(
-        `getProgram() failed before diagnostics: ${e?.message ?? String(e)}`
-      );
+      postLog(`getProgram() failed before diagnostics: ${e?.message ?? String(e)}`);
     }
 
-    const syntactic =
-      this.#env.languageService.getSyntacticDiagnostics(path) || [];
-    const semantic =
-      this.#env.languageService.getSemanticDiagnostics(path) || [];
+    const syntactic = this.#env.languageService.getSyntacticDiagnostics(path) || [];
+    const semantic = this.#env.languageService.getSemanticDiagnostics(path) || [];
     const all = [...syntactic, ...semantic];
 
     if (all.length > 0) {
       postLog(`Diagnostics detail for ${path}:`);
       for (const d of all) {
         try {
-          const msg = flattenDiagnosticMessage(d);
+          const msg = ts.flattenDiagnosticMessageText(d.messageText, '\n');
           postLog(
-            `  - code:${d.code} start:${d.start ?? '-'} len:${
-              d.length ?? '-'
-            } msg:${msg}`
+            `  - code:${d.code} start:${d.start ?? '-'} len:${d.length ?? '-'} msg:${msg}`
           );
         } catch (e) {
           postLog(`  - (failed to stringify diag) ${String(e?.message ?? e)}`);
@@ -277,7 +290,7 @@ class LspServer {
       }
     }
 
-    const diagnostics = all.map((d) => mapTsDiagnosticToLsp(d, path, program));
+    const diagnostics = all.map((d) => this.#mapTsDiagnosticToLsp(d, path, program));
 
     postLog(`Publishing ${diagnostics.length} diagnostics for ${path}`);
     self.postMessage({
@@ -301,57 +314,11 @@ class LspServer {
     if (!path.startsWith('/')) path = `/${path}`;
     return path;
   }
-
-  /*
-  // ----------------------------
-  // Test-only API: raw diagnostics
-  // Returns JSON-safe subset of Diagnostic objects
-  // ----------------------------
-  async getRawDiagnosticsForTest(uri) (
-    if (!this.#env) {
-      postLog('getRawDiagnosticsForTest called but env is not initialized');
-      return { diagnostics: [] };
-    }
-    const path = this.#uriToPath(uri);
-    const semantic =
-      this.#env.languageService.getSemanticDiagnostics(path) || [];
-    const syntactic =
-      this.#env.languageService.getSyntacticDiagnostics(path) || [];
-    const all = [...syntactic, ...semantic];
-
-    // Map to JSON-safe structure; preserve messageText which may be chain object
-    const safe = all.map((d) => {
-      return {
-        code: d.code,
-        category: d.category,
-        start: d.start,
-        length: d.length,
-        messageText: d.messageText, // might be string or DiagnosticMessageChain (object)
-        relatedInformation: Array.isArray(d.relatedInformation)
-          ? d.relatedInformation.map((ri) => {
-              // Try to return JSON-safe subset; remove file objects
-              return {
-                messageText: ri.messageText,
-                fileName:
-                  ri.file && ri.file.fileName ? ri.file.fileName : ri.file,
-                start: ri.start,
-                length: ri.length,
-              };
-            })
-          : undefined,
-      };
-    });
-
-    return { diagnostics: safe };
-  }
-  */
 }
 
 let server = null;
 async function getServer() {
-  if (!server) {
-    server = new LspServer();
-  }
+  if (!server) server = new LspServer();
   return server;
 }
 
@@ -382,12 +349,4 @@ export const LspCore = {
     const s = await getServer();
     await s.publishDiagnostics(uri);
   },
-
-  /*
-  // Test-only RPC consumer can call this
-  getRawDiagnosticsForTest: async (uri) => {
-    const s = await getServer();
-    return await s.getRawDiagnosticsForTest(uri);
-  },
-  */
 };
