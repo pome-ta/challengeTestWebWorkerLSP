@@ -74,12 +74,6 @@
       const getbtn = document.getElementById('getlog');
       const cpybtn = document.getElementById('copylog');
       getbtn.addEventListener('click', (e) => {
-        //eruda.show();
-        /*
-        while (outdiv.firstChild) {
-          outdiv.removeChild(outdiv.firstChild);
-        }
-        */
         const erudaShadow = document.getElementById('eruda').shadowRoot;
         const lunaConsoleLogContents = erudaShadow.querySelectorAll(
           '.luna-console-log-content'
@@ -88,7 +82,6 @@
           //outdiv.appendChild(content.cloneNode(true));
           outdiv.appendChild(content);
         });
-        //eruda.hide();
       });
       cpybtn.addEventListener('click', (e) => {
         const innerText = outdiv.innerText;
