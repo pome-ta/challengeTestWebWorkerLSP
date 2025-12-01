@@ -13,7 +13,6 @@ import {
 
 console.log('🧩 worker-didChange-basic.test loaded');
 
-
 (async () => {
   const testName = 'LSP: didChange basic full-replace should update diagnostics';
   let worker;
