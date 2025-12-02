@@ -1,5 +1,5 @@
 // core/lsp-core.js
-// v0.0.2.12
+// v0.0.2.14
 
 import ts from 'https://esm.sh/typescript';
 import { VfsCore } from './vfs-core.js';
@@ -7,7 +7,7 @@ import { postLog } from '../util/logger.js';
 
 class LspServer {
   #env = null;
-  #openFiles = new Map();
+  #openFiles = new Map(); // uri -> { text, version }
   #compilerOptions = {};
 
   constructor() {
@@ -16,7 +16,6 @@ class LspServer {
 
   /**
    * Minimal compiler options merge: take defaults and shallow-merge incoming.
-   * Avoid heavy sanitization here; keep small and predictable.
    */
   #mergeCompilerOptions(incoming = {}) {
     const defaults = VfsCore.getDefaultCompilerOptions
@@ -55,6 +54,9 @@ class LspServer {
     };
   }
 
+  /**
+   * Basic didOpen: store file text/version, recreate env, publish diagnostics.
+   */
   async didOpen(params) {
     const { uri, text, version } = params.textDocument;
     const path = this.#uriToPath(uri);
@@ -62,26 +64,68 @@ class LspServer {
 
     this.#openFiles.set(uri, { text, version });
     await this.#recreateEnv();
-    // publish immediately (no debounce)
     await this.publishDiagnostics(uri);
   }
 
+  /**
+   * didChange: attempt incremental (range-based) edit when possible.
+   * Falls back to full replace (#recreateEnv) otherwise.
+   */
   async didChange(params) {
     const { uri, version } = params.textDocument;
     const changes = params.contentChanges || [];
-    const text = changes.length ? changes[changes.length - 1].text : undefined;
-    if (typeof text !== 'string') {
-      postLog(`didChange received but no text for ${uri}`);
-      return;
-    }
+
     const path = this.#uriToPath(uri);
     postLog(`didChange ${path} (version:${version})`);
 
-    this.#openFiles.set(uri, { text, version });
-    await this.#recreateEnv();
-    await this.publishDiagnostics(uri);
+    // Find last text if provided as full replace in contentChanges
+    // LSP: contentChanges may be array; if last has `text` w/o range -> full replace
+    // If exactly one change and that change has range -> incremental candidate
+    try {
+      if (changes.length === 1 && changes[0] && typeof changes[0].text === 'string' && changes[0].range) {
+        // Attempt incremental
+        const change = changes[0];
+        const applied = await this.#applyIncrementalChange(uri, change);
+        if (applied) {
+          // Update openFiles map with new text/version
+          const stored = this.#openFiles.get(uri) || { text: '', version };
+          this.#openFiles.set(uri, { text: applied, version });
+          // publish diagnostics for the file
+          await this.publishDiagnostics(uri);
+          return;
+        }
+        // else fallthrough to full replace
+        postLog('incremental apply returned false: falling back to full replace');
+      }
+
+      // Non-incremental path: determine new text if provided; otherwise rely on stored openFiles
+      let newText;
+      if (changes.length && typeof changes[changes.length - 1].text === 'string' && !changes[changes.length - 1].range) {
+        // full replace using last change text
+        newText = changes[changes.length - 1].text;
+      } else {
+        // no text provided: try to use existing stored text (no-op) but still recreate env to ensure consistency
+        const stored = this.#openFiles.get(uri);
+        newText = stored ? stored.text : undefined;
+      }
+
+      if (typeof newText === 'string') {
+        this.#openFiles.set(uri, { text: newText, version });
+      }
+
+      await this.#recreateEnv();
+      await this.publishDiagnostics(uri);
+    } catch (e) {
+      postLog(`didChange unexpected error: ${String(e?.message ?? e)}. Falling back to recreateEnv.`);
+      // best-effort fallback
+      await this.#recreateEnv();
+      await this.publishDiagnostics(uri);
+    }
   }
 
+  /**
+   * didClose: remove from openFiles, recreate env, clear diagnostics for the uri
+   */
   async didClose(params) {
     const { uri } = params.textDocument;
     const path = this.#uriToPath(uri);
@@ -89,8 +133,112 @@ class LspServer {
 
     this.#openFiles.delete(uri);
     await this.#recreateEnv();
-    // clear diagnostics immediately
     this.#clearDiagnostics(uri);
+  }
+
+  /**
+   * Apply a single LSP incremental change object to stored text and VFS.
+   * - change: { range, rangeLength?, text }
+   * - returns newText (string) on success, or false on failure
+   */
+  async #applyIncrementalChange(uri, change) {
+    try {
+      if (!change || typeof change.text !== 'string' || !change.range) {
+        return false;
+      }
+
+      const stored = this.#openFiles.get(uri);
+      if (!stored || typeof stored.text !== 'string') {
+        postLog(`#applyIncrementalChange: no stored text for ${uri}`);
+        return false;
+      }
+
+      const oldText = stored.text;
+      const { range } = change;
+      const startOffset = this.#positionToOffset(oldText, range.start);
+      const endOffset = this.#positionToOffset(oldText, range.end);
+
+      if (startOffset === null || endOffset === null || startOffset > endOffset) {
+        postLog(`#applyIncrementalChange: invalid offsets for ${uri} start=${startOffset} end=${endOffset}`);
+        return false;
+      }
+
+      const newText = oldText.slice(0, startOffset) + change.text + oldText.slice(endOffset);
+
+      // If env exists and file present, update in-place. Otherwise, indicate failure (let caller recreate).
+      if (this.#env && typeof this.#env.getSourceFile === 'function') {
+        // VFS path expected to be normalized with leading '/'
+        let path = this.#uriToPath(uri);
+        if (!path.startsWith('/')) path = `/${path}`;
+
+        try {
+          // If source file exists in env, update. Otherwise create file.
+          if (this.#env.getSourceFile && this.#env.getSourceFile(path)) {
+            // updateFile available on virtual env
+            if (typeof this.#env.updateFile === 'function') {
+              this.#env.updateFile(path, newText);
+            } else {
+              // fallback: recreate env (signal failure)
+              postLog('#applyIncrementalChange: env.updateFile not available');
+              return false;
+            }
+          } else {
+            if (typeof this.#env.createFile === 'function') {
+              this.#env.createFile(path, newText);
+            } else {
+              postLog('#applyIncrementalChange: env.createFile not available');
+              return false;
+            }
+          }
+          // success
+          return newText;
+        } catch (e) {
+          postLog(`#applyIncrementalChange: env update/create failed: ${String(e?.message ?? e)}`);
+          return false;
+        }
+      } else {
+        postLog('#applyIncrementalChange: env not initialized; cannot apply incremental');
+        return false;
+      }
+    } catch (e) {
+      postLog(`#applyIncrementalChange unexpected error: ${String(e?.message ?? e)}`);
+      return false;
+    }
+  }
+
+  /**
+   * Convert LSP position {line, character} into UTF-16 code unit offset within `text`.
+   * Implementation: compute by splitting into lines and summing lengths including '\n' between lines.
+   * Returns null on invalid input.
+   */
+  #positionToOffset(text, pos) {
+    try {
+      if (!text || !pos || typeof pos.line !== 'number' || typeof pos.character !== 'number') {
+        return null;
+      }
+      const lines = text.split('\n');
+      if (pos.line < 0 || pos.line >= lines.length) {
+        // allow position at EOF equal to lines.length (when last line is empty?) - but be conservative
+        if (pos.line === lines.length && pos.character === 0) {
+          // offset = text.length
+          return text.length;
+        }
+        return null;
+      }
+      let offset = 0;
+      for (let i = 0; i < pos.line; i++) {
+        // add line length + 1 for the '\n' that was removed by split
+        offset += lines[i].length + 1;
+      }
+      // character is number of UTF-16 code units into the line
+      const line = lines[pos.line];
+      const ch = Math.max(0, Math.min(pos.character, line.length));
+      offset += ch;
+      return offset;
+    } catch (e) {
+      postLog(`#positionToOffset error: ${String(e?.message ?? e)}`);
+      return null;
+    }
   }
 
   /**
@@ -114,7 +262,7 @@ class LspServer {
         initialFiles
       );
 
-      // Ensure content applied
+      // Ensure content applied (defensive)
       for (const [path, content] of Object.entries(initialFiles)) {
         try {
           if (this.#env.getSourceFile && this.#env.getSourceFile(path)) {
@@ -123,9 +271,7 @@ class LspServer {
             this.#env.createFile(path, content);
           }
         } catch (e) {
-          postLog(
-            `recreateEnv sync failed for ${path}: ${e?.message ?? String(e)}`
-          );
+          postLog(`recreateEnv sync failed for ${path}: ${e?.message ?? String(e)}`);
         }
       }
 
@@ -133,9 +279,7 @@ class LspServer {
       try {
         this.#env.languageService.getProgram();
       } catch (e) {
-        postLog(
-          `getProgram() during recreateEnv failed: ${e?.message ?? String(e)}`
-        );
+        postLog(`getProgram() during recreateEnv failed: ${e?.message ?? String(e)}`);
       }
 
       postLog(`recreateEnv done; roots: [${rootFiles.join(', ')}]`);
@@ -147,8 +291,6 @@ class LspServer {
 
   /**
    * Map TS Diagnostic -> LSP Diagnostic (standards-aligned).
-   * - message uses ts.flattenDiagnosticMessageText
-   * - relatedInformation mapped only when file+start available
    */
   #mapTsDiagnosticToLsp(diag, path, program) {
     const start = typeof diag.start === 'number' ? diag.start : 0;
@@ -221,11 +363,7 @@ class LspServer {
               typeof ri.file === 'object' &&
               typeof ri.file.fileName === 'string'
             ) {
-              riUri = `file://${
-                ri.file.fileName.startsWith('/')
-                  ? ri.file.fileName
-                  : ri.file.fileName
-              }`;
+              riUri = `file://${ri.file.fileName.startsWith('/') ? ri.file.fileName : ri.file.fileName}`;
               if (typeof ri.start === 'number') {
                 const pos = ts.getLineAndCharacterOfPosition(ri.file, ri.start);
                 riRange = {
@@ -235,7 +373,6 @@ class LspServer {
               }
             } else if (ri?.file && typeof ri.file === 'string') {
               riUri = `file://${ri.file.startsWith('/') ? ri.file : ri.file}`;
-              // cannot compute line/char without SourceFile
             }
 
             const riMsg = ts.flattenDiagnosticMessageText(ri.messageText, '\n');
@@ -248,7 +385,6 @@ class LspServer {
             }
           } catch (e) {
             postLog(`map relatedInformation error: ${String(e?.message ?? e)}`);
-            // continue with other relatedInformation
           }
         }
 
@@ -277,9 +413,7 @@ class LspServer {
     try {
       program = this.#env.languageService.getProgram();
     } catch (e) {
-      postLog(
-        `getProgram() failed before diagnostics: ${e?.message ?? String(e)}`
-      );
+      postLog(`getProgram() failed before diagnostics: ${e?.message ?? String(e)}`);
     }
 
     const syntactic =
@@ -293,20 +427,14 @@ class LspServer {
       for (const d of all) {
         try {
           const msg = ts.flattenDiagnosticMessageText(d.messageText, '\n');
-          postLog(
-            `  - code:${d.code} start:${d.start ?? '-'} len:${
-              d.length ?? '-'
-            } msg:${msg}`
-          );
+          postLog(`  - code:${d.code} start:${d.start ?? '-'} len:${d.length ?? '-'} msg:${msg}`);
         } catch (e) {
           postLog(`  - (failed to stringify diag) ${String(e?.message ?? e)}`);
         }
       }
     }
 
-    const diagnostics = all.map((d) =>
-      this.#mapTsDiagnosticToLsp(d, path, program)
-    );
+    const diagnostics = all.map((d) => this.#mapTsDiagnosticToLsp(d, path, program));
 
     postLog(`Publishing ${diagnostics.length} diagnostics for ${path}`);
     self.postMessage({
@@ -341,7 +469,6 @@ async function getServer() {
   if (!server) {
     server = new LspServer();
   }
-
   return server;
 }
 
@@ -373,3 +500,4 @@ export const LspCore = {
     await s.publishDiagnostics(uri);
   },
 };
+
