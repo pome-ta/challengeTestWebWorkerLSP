@@ -1,9 +1,8 @@
 // core/lsp-core.js
-// v0.0.2.14
-// - Adds incremental didChange (LSP range-based) as an optimization path.
-// - Full-replace still supported as fallback (recreate env).
-// - No debounce; diagnostics published immediately after change handling.
-// - Uses ts.flattenDiagnosticMessageText for message flattening.
+// v0.0.2.14 (patched incremental fallback + diagnostics return)
+// - incremental path is attempted when change.range is present
+// - after incremental apply, if resulting diagnostics are empty we fallback to recreateEnv -> publish again
+// - publishDiagnostics now returns diagnostics array for callers to inspect
 
 import ts from 'https://esm.sh/typescript';
 import { VfsCore } from './vfs-core.js';
@@ -18,9 +17,6 @@ class LspServer {
     postLog('LspServer instance created');
   }
 
-  /**
-   * Minimal compiler options merge: take defaults and shallow-merge incoming.
-   */
   #mergeCompilerOptions(incoming = {}) {
     const defaults = VfsCore.getDefaultCompilerOptions
       ? VfsCore.getDefaultCompilerOptions()
@@ -41,7 +37,7 @@ class LspServer {
 
     await VfsCore.ensureReady();
 
-    // Create empty environment (no root files yet)
+    // Create empty environment
     this.#env = VfsCore.createEnvironment(this.#compilerOptions, [], {});
     postLog('LspServer initialized, env created.');
   }
@@ -58,9 +54,6 @@ class LspServer {
     };
   }
 
-  /**
-   * Helpers: uri <-> path conversions used across the server
-   */
   #uriToPath(uri) {
     if (!uri) return '';
     let path = String(uri).replace(/^file:\/\//, '');
@@ -74,52 +67,34 @@ class LspServer {
     return `file://${path}`;
   }
 
-  /**
-   * Convert LSP position (line, character) to string offset for given text.
-   * If out-of-range, clamp to bounds.
-   */
   #posToOffset(text, line, character) {
     if (typeof text !== 'string') return 0;
     const lines = text.split('\n');
     const l = Math.max(0, Math.min(line, lines.length - 1));
     const ch = Math.max(0, Math.min(character, lines[l].length));
     let offset = 0;
-    for (let i = 0; i < l; i++) offset += lines[i].length + 1; // +1 for '\n'
+    for (let i = 0; i < l; i++) offset += lines[i].length + 1;
     offset += ch;
     return offset;
   }
 
-  /**
-   * Apply a single LSP incremental change to oldText based on change.range and change.text.
-   * Returns the new text, or throws if inputs invalid.
-   *
-   * LSP change object shape expected:
-   *  { range: { start:{line,character}, end:{line,character} }, text: '...' }
-   */
   #applyRangeChange(oldText, change) {
-    if (!oldText || !change || typeof change.text !== 'string') {
-      throw new Error('Invalid arguments for applyRangeChange');
-    }
+    if (typeof oldText !== 'string') throw new Error('oldText must be string');
+    if (!change || typeof change.text !== 'string') throw new Error('change.text required');
+
     const range = change.range;
-    if (!range || !range.start || !range.end) {
-      throw new Error('Range required for applyRangeChange');
-    }
+    if (!range || !range.start || !range.end) throw new Error('range required');
 
     const startOffset = this.#posToOffset(oldText, range.start.line, range.start.character);
     const endOffset = this.#posToOffset(oldText, range.end.line, range.end.character);
 
-    if (startOffset < 0 || endOffset < startOffset) {
-      throw new Error('Invalid range offsets');
-    }
+    if (startOffset < 0 || endOffset < startOffset) throw new Error('Invalid range offsets');
 
     const before = oldText.slice(0, startOffset);
     const after = oldText.slice(endOffset);
     return `${before}${change.text}${after}`;
   }
 
-  /**
-   * didOpen: register file and recreate env
-   */
   async didOpen(params) {
     const { uri, text, version } = params.textDocument;
     const path = this.#uriToPath(uri);
@@ -130,11 +105,6 @@ class LspServer {
     await this.publishDiagnostics(uri);
   }
 
-  /**
-   * didChange:
-   * - If last change has a LSP range -> attempt incremental update (no recreateEnv)
-   * - Otherwise fallback to full replace + recreateEnv
-   */
   async didChange(params) {
     const { uri, version } = params.textDocument;
     const changes = params.contentChanges || [];
@@ -147,55 +117,72 @@ class LspServer {
     const path = this.#uriToPath(uri);
     postLog(`didChange ${path} (version:${version})`);
 
-    // Try incremental path when range is provided
     if (last.range) {
+      // Attempt incremental apply
       try {
         const existing = this.#openFiles.get(uri);
         const oldText = existing?.text ?? '';
+        // Debug logging: show snippet and lengths
+        postLog(`incremental: oldText.length=${oldText.length}, change.text.length=${String(last.text ?? '').length}`);
+
         const newText = this.#applyRangeChange(oldText, last);
+
+        // Log offsets & small preview for debugging
+        try {
+          const startOffset = this.#posToOffset(oldText, last.range.start.line, last.range.start.character);
+          const endOffset = this.#posToOffset(oldText, last.range.end.line, last.range.end.character);
+          const beforeSample = oldText.slice(Math.max(0, startOffset - 10), Math.min(startOffset + 10, oldText.length));
+          const afterSample = newText.slice(Math.max(0, startOffset - 10), Math.min(startOffset + 10, newText.length));
+          postLog(`incremental offsets: start=${startOffset}, end=${endOffset}, beforeSample="${beforeSample}", afterSample="${afterSample}"`);
+        } catch (e) {
+          // non-fatal
+        }
 
         // update in-memory openFiles
         this.#openFiles.set(uri, { text: newText, version });
 
-        // update VFS file content in-place (avoid recreateEnv)
-        try {
-          if (this.#env && this.#env.getSourceFile && this.#env.getSourceFile(path)) {
-            // Prefer updateFile when available
-            if (typeof this.#env.updateFile === 'function') {
+        // Update VFS in-place if possible
+        if (this.#env && this.#env.getSourceFile && this.#env.getSourceFile(path)) {
+          if (typeof this.#env.updateFile === 'function') {
+            try {
               this.#env.updateFile(path, newText);
-            } else {
-              // env lacks updateFile (defensive): recreate full env as fallback
-              postLog('env.updateFile not available; falling back to recreateEnv');
-              await this.#recreateEnv();
-              await this.publishDiagnostics(uri);
-              return;
+            } catch (e) {
+              postLog(`env.updateFile threw: ${String(e?.message ?? e)}; falling back`);
+              throw e;
             }
           } else {
-            // If file not present in env yet, create it (safe)
-            if (this.#env && typeof this.#env.createFile === 'function') {
-              this.#env.createFile(path, newText);
-            } else {
-              postLog('env.createFile not available; falling back to recreateEnv');
-              await this.#recreateEnv();
-              await this.publishDiagnostics(uri);
-              return;
-            }
+            postLog('env.updateFile not available; falling back to recreateEnv');
+            throw new Error('env.updateFile missing');
           }
-
-          // incremental update succeeded — publish diagnostics and return
-          await this.publishDiagnostics(uri);
-          return;
-        } catch (e) {
-          postLog(`incremental apply failed (env update): ${String(e?.message ?? e)}; falling back`);
-          // fallthrough to full-replace fallback
+        } else {
+          // File not present: try createFile
+          if (this.#env && typeof this.#env.createFile === 'function') {
+            this.#env.createFile(path, newText);
+          } else {
+            postLog('env.createFile not available; falling back to recreateEnv');
+            throw new Error('env.createFile missing');
+          }
         }
+
+        // incremental apply done. Now check diagnostics.
+        const diagnosticsAfter = await this.publishDiagnostics(uri);
+
+        // If diagnostics are empty after incremental apply, fallback to recreateEnv once.
+        if ((!diagnosticsAfter || diagnosticsAfter.length === 0)) {
+          postLog('incremental apply produced 0 diagnostics; performing safe fallback recreateEnv -> publishDiagnostics');
+          // restore openFiles text already set; now recreate
+          await this.#recreateEnv();
+          await this.publishDiagnostics(uri);
+        }
+
+        return;
       } catch (e) {
-        postLog(`incremental apply failed (text apply): ${String(e?.message ?? e)}; falling back`);
-        // fallthrough to full-replace fallback
+        postLog(`incremental apply failed: ${String(e?.message ?? e)}; falling back to full-replace`);
+        // fallthrough to fallback
       }
     }
 
-    // Fallback: full replace path (recreate environment)
+    // Fallback: full replace
     try {
       const text = last.text;
       if (typeof text !== 'string') {
@@ -220,10 +207,6 @@ class LspServer {
     this.#clearDiagnostics(uri);
   }
 
-  /**
-   * Recreate the VFS environment from currently open files.
-   * Simplified: no retry loop; apply initialFiles via createEnvironment then sync content.
-   */
   async #recreateEnv() {
     const rootFiles = [];
     const initialFiles = {};
@@ -235,13 +218,8 @@ class LspServer {
     }
 
     try {
-      this.#env = VfsCore.createEnvironment(
-        this.#compilerOptions,
-        rootFiles,
-        initialFiles
-      );
+      this.#env = VfsCore.createEnvironment(this.#compilerOptions, rootFiles, initialFiles);
 
-      // Ensure content applied
       for (const [path, content] of Object.entries(initialFiles)) {
         try {
           if (this.#env.getSourceFile && this.#env.getSourceFile(path)) {
@@ -258,7 +236,6 @@ class LspServer {
         }
       }
 
-      // Prime language service program (best-effort)
       try {
         this.#env.languageService.getProgram();
       } catch (e) {
@@ -272,10 +249,6 @@ class LspServer {
     }
   }
 
-  /**
-   * Map TS Diagnostic -> LSP Diagnostic (standards-aligned).
-   * Uses ts.flattenDiagnosticMessageText for message.
-   */
   #mapTsDiagnosticToLsp(diag, path, program) {
     const start = typeof diag.start === 'number' ? diag.start : 0;
     const length = typeof diag.length === 'number' ? diag.length : 0;
@@ -299,8 +272,7 @@ class LspServer {
 
     const message = ts.flattenDiagnosticMessageText(diag.messageText, '\n');
 
-    // Severity mapping: TS -> LSP
-    let severity = 1; // default Error
+    let severity = 1;
     if (typeof diag.category === 'number') {
       switch (diag.category) {
         case ts.DiagnosticCategory.Error:
@@ -327,7 +299,6 @@ class LspServer {
       code: diag.code,
     };
 
-    // Map relatedInformation -> LSP relatedInformation when location available
     try {
       if (Array.isArray(diag.relatedInformation) && diag.relatedInformation.length > 0) {
         const riList = [];
@@ -366,12 +337,12 @@ class LspServer {
   }
 
   /**
-   * Publish diagnostics for a given uri (immediate).
+   * Publish diagnostics and return the diagnostics array for caller inspection.
    */
   async publishDiagnostics(uri) {
     if (!this.#env) {
       postLog('publishDiagnostics called but env is not initialized');
-      return;
+      return [];
     }
     const path = this.#uriToPath(uri);
 
@@ -406,6 +377,8 @@ class LspServer {
       method: 'textDocument/publishDiagnostics',
       params: { uri, diagnostics },
     });
+
+    return diagnostics;
   }
 
   #clearDiagnostics(uri) {
@@ -448,6 +421,6 @@ export const LspCore = {
 
   publishDiagnostics: async (uri) => {
     const s = await getServer();
-    await s.publishDiagnostics(uri);
+    return await s.publishDiagnostics(uri);
   },
 };
