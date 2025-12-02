@@ -1,8 +1,8 @@
 // core/lsp-core.js
-// v0.0.2.14 (patched incremental fallback + diagnostics return)
-// - incremental path is attempted when change.range is present
-// - after incremental apply, if resulting diagnostics are empty we fallback to recreateEnv -> publish again
-// - publishDiagnostics now returns diagnostics array for callers to inspect
+// v0.0.2.14
+// - incremental apply: try in-place update, but if diagnostics empty -> forced fallback recreateEnv -> publish
+// - publishDiagnostics returns diagnostics array for caller inspection
+// - added extra debug logs (newText snippet / lengths)
 
 import ts from 'https://esm.sh/typescript';
 import { VfsCore } from './vfs-core.js';
@@ -122,57 +122,61 @@ class LspServer {
       try {
         const existing = this.#openFiles.get(uri);
         const oldText = existing?.text ?? '';
-        // Debug logging: show snippet and lengths
         postLog(`incremental: oldText.length=${oldText.length}, change.text.length=${String(last.text ?? '').length}`);
 
         const newText = this.#applyRangeChange(oldText, last);
 
-        // Log offsets & small preview for debugging
-        try {
-          const startOffset = this.#posToOffset(oldText, last.range.start.line, last.range.start.character);
-          const endOffset = this.#posToOffset(oldText, last.range.end.line, last.range.end.character);
-          const beforeSample = oldText.slice(Math.max(0, startOffset - 10), Math.min(startOffset + 10, oldText.length));
-          const afterSample = newText.slice(Math.max(0, startOffset - 10), Math.min(startOffset + 10, newText.length));
-          postLog(`incremental offsets: start=${startOffset}, end=${endOffset}, beforeSample="${beforeSample}", afterSample="${afterSample}"`);
-        } catch (e) {
-          // non-fatal
-        }
+        // More detailed debug: show small preview and lengths
+        const startOffset = this.#posToOffset(oldText, last.range.start.line, last.range.start.character);
+        const endOffset = this.#posToOffset(oldText, last.range.end.line, last.range.end.character);
+        const beforeSample = oldText.slice(Math.max(0, startOffset - 12), Math.min(startOffset + 12, oldText.length));
+        const afterSample = newText.slice(Math.max(0, startOffset - 12), Math.min(startOffset + 12, newText.length));
+        postLog(
+          `incremental offsets: start=${startOffset}, end=${endOffset}, beforeSample="${beforeSample}", afterSample="${afterSample}"`,
+        );
 
         // update in-memory openFiles
         this.#openFiles.set(uri, { text: newText, version });
 
         // Update VFS in-place if possible
+        let updatedInPlace = false;
         if (this.#env && this.#env.getSourceFile && this.#env.getSourceFile(path)) {
           if (typeof this.#env.updateFile === 'function') {
             try {
               this.#env.updateFile(path, newText);
+              updatedInPlace = true;
+              postLog('incremental: env.updateFile succeeded');
             } catch (e) {
-              postLog(`env.updateFile threw: ${String(e?.message ?? e)}; falling back`);
-              throw e;
+              postLog(`env.updateFile threw: ${String(e?.message ?? e)}; will fallback`);
             }
           } else {
-            postLog('env.updateFile not available; falling back to recreateEnv');
-            throw new Error('env.updateFile missing');
+            postLog('env.updateFile not available');
           }
         } else {
-          // File not present: try createFile
           if (this.#env && typeof this.#env.createFile === 'function') {
-            this.#env.createFile(path, newText);
+            try {
+              this.#env.createFile(path, newText);
+              updatedInPlace = true;
+              postLog('incremental: env.createFile succeeded (file was absent)');
+            } catch (e) {
+              postLog(`env.createFile threw: ${String(e?.message ?? e)}; will fallback`);
+            }
           } else {
-            postLog('env.createFile not available; falling back to recreateEnv');
-            throw new Error('env.createFile missing');
+            postLog('env.createFile not available');
           }
         }
 
-        // incremental apply done. Now check diagnostics.
+        // After attempting incremental update, always request diagnostics.
         const diagnosticsAfter = await this.publishDiagnostics(uri);
 
-        // If diagnostics are empty after incremental apply, fallback to recreateEnv once.
-        if ((!diagnosticsAfter || diagnosticsAfter.length === 0)) {
-          postLog('incremental apply produced 0 diagnostics; performing safe fallback recreateEnv -> publishDiagnostics');
-          // restore openFiles text already set; now recreate
+        // If diagnostics are empty, force a safe fallback once (recreate env and republish).
+        if (!diagnosticsAfter || diagnosticsAfter.length === 0) {
+          postLog('incremental apply produced 0 diagnostics -> forcing fallback recreateEnv -> publishDiagnostics');
           await this.#recreateEnv();
-          await this.publishDiagnostics(uri);
+          const diagnosticsAfterFallback = await this.publishDiagnostics(uri);
+          postLog(`fallback publish produced ${diagnosticsAfterFallback.length} diagnostics`);
+        } else {
+          postLog(`incremental publish produced ${diagnosticsAfter.length} diagnostics`);
         }
 
         return;
@@ -311,7 +315,10 @@ class LspServer {
               riUri = this.#pathToUri(ri.file.fileName);
               if (typeof ri.start === 'number') {
                 const pos = ts.getLineAndCharacterOfPosition(ri.file, ri.start);
-                riRange = { start: { line: pos.line, character: pos.character }, end: { line: pos.line, character: pos.character } };
+                riRange = {
+                  start: { line: pos.line, character: pos.character },
+                  end: { line: pos.line, character: pos.character },
+                };
               }
             } else if (ri?.file && typeof ri.file === 'string') {
               riUri = this.#pathToUri(ri.file);
@@ -337,7 +344,7 @@ class LspServer {
   }
 
   /**
-   * Publish diagnostics and return the diagnostics array for caller inspection.
+   * Publish diagnostics and return diagnostics array.
    */
   async publishDiagnostics(uri) {
     if (!this.#env) {

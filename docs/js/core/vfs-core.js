@@ -24,17 +24,12 @@ function mapClone(src) {
   return new Map(src);
 }
 
-async function createDefaultMapWithRetries(
-  retryCount = 3,
-  perAttemptTimeoutMs = 5000
-) {
+async function createDefaultMapWithRetries(retryCount = 3, perAttemptTimeoutMs = 5000) {
   let lastError = null;
   for (let attempt = 1; attempt <= retryCount; attempt++) {
     postLog(`VFS init attempt ${attempt}/${retryCount}`);
     try {
-      const timeout = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs)
-      );
+      const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs));
 
       const defaultMap = await Promise.race([
         vfs.createDefaultMapFromCDN(
@@ -44,7 +39,7 @@ async function createDefaultMapWithRetries(
           },
           ts.version,
           false,
-          ts
+          ts,
         ),
         timeout,
       ]);
@@ -116,11 +111,7 @@ export function getDefaultCompilerOptions() {
   };
 }
 
-export function createEnvironment(
-  compilerOptions = {},
-  rootFiles = [],
-  initialFiles = {}
-) {
+export function createEnvironment(compilerOptions = {}, rootFiles = [], initialFiles = {}) {
   if (!cachedDefaultMap) {
     throw new Error('VFS not initialized. Call ensureReady() first.');
   }
@@ -136,11 +127,7 @@ export function createEnvironment(
       mapForEnv.set(key, data);
       postLog(`createEnvironment: injected initial file: ${key}`);
     } catch (e) {
-      postLog(
-        `createEnvironment: failed to inject initial file ${rawKey}: ${String(
-          e?.message ?? e
-        )}`
-      );
+      postLog(`createEnvironment: failed to inject initial file ${rawKey}: ${String(e?.message ?? e)}`);
     }
   }
 
@@ -152,19 +139,12 @@ export function createEnvironment(
   const opts = Object.assign({}, defaultOptions, compilerOptions);
 
   postLog(
-    `createEnvironment: about to create env; roots: [${rootPaths.join(
-      ', '
-    )}], initialFiles: [${Object.keys(normalizedInitialFiles).join(
-      ', '
-    )}], opts: ${JSON.stringify(opts)}`
+    `createEnvironment: about to create env; roots: [${rootPaths.join(', ')}], initialFiles: [${Object.keys(
+      normalizedInitialFiles,
+    ).join(', ')}], opts: ${JSON.stringify(opts)}`,
   );
 
-  const env = vfs.createVirtualTypeScriptEnvironment(
-    system,
-    rootPaths,
-    ts,
-    opts
-  );
+  const env = vfs.createVirtualTypeScriptEnvironment(system, rootPaths, ts, opts);
 
   postLog(`VFS environment created; roots: [${rootPaths.join(', ')}]`);
 
@@ -177,20 +157,14 @@ export function createEnvironment(
         env.createFile(path, content);
       }
     } catch (e) {
-      postLog(
-        `createEnvironment sync apply failed for ${path}: ${String(
-          e?.message ?? e
-        )}`
-      );
+      postLog(`createEnvironment sync apply failed for ${path}: ${String(e?.message ?? e)}`);
     }
   }
 
   try {
     env.languageService.getProgram();
   } catch (e) {
-    postLog(
-      `getProgram() failed after env creation: ${String(e?.message ?? e)}`
-    );
+    postLog(`getProgram() failed after env creation: ${String(e?.message ?? e)}`);
   }
 
   return env;
