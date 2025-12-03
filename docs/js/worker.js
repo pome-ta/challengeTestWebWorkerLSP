@@ -1,5 +1,5 @@
 // worker.js
-// v0.0.2.12
+// v0.0.2.14
 
 import { VfsCore } from './core/vfs-core.js';
 import { LspCore } from './core/lsp-core.js';
@@ -65,8 +65,7 @@ async function handleJsonRpcMessage(msg) {
   // - lsp/* except initialize/ping/shutdown require VFS
   const requiresVfs =
     method.startsWith('textDocument/') ||
-    (method.startsWith('lsp/') &&
-      !['lsp/initialize', 'lsp/ping', 'lsp/shutdown'].includes(method));
+    (method.startsWith('lsp/') && !['lsp/initialize', 'lsp/ping', 'lsp/shutdown'].includes(method));
 
   if (requiresVfs && !VfsCore.isReady()) {
     const message = 'VFS not ready. Call `vfs/ensureReady` first.';

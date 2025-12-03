@@ -1,5 +1,5 @@
 // core/vfs-core.js
-// v0.0.2.9
+// v0.0.2.14
 // - Based on v0.0.2.7 with small robustifying touches
 // - Exports getDefaultCompilerOptions, createEnvironment, ensureReady, resetForTest
 // - Normalizes paths to leading '/' form, injects initialFiles into cloned default map
