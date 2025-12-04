@@ -108,7 +108,11 @@ class LspServer {
     }
 
     try {
-      this.#env = VfsCore.createEnvironment(this.#compilerOptions, rootFiles, initialFiles);
+      this.#env = VfsCore.createEnvironment(
+        this.#compilerOptions,
+        rootFiles,
+        initialFiles
+      );
 
       // Ensure content applied
       for (const [path, content] of Object.entries(initialFiles)) {
@@ -119,7 +123,9 @@ class LspServer {
             this.#env.createFile(path, content);
           }
         } catch (e) {
-          postLog(`recreateEnv sync failed for ${path}: ${e?.message ?? String(e)}`);
+          postLog(
+            `recreateEnv sync failed for ${path}: ${e?.message ?? String(e)}`
+          );
         }
       }
 
@@ -127,7 +133,9 @@ class LspServer {
       try {
         this.#env.languageService.getProgram();
       } catch (e) {
-        postLog(`getProgram() during recreateEnv failed: ${e?.message ?? String(e)}`);
+        postLog(
+          `getProgram() during recreateEnv failed: ${e?.message ?? String(e)}`
+        );
       }
 
       postLog(`recreateEnv done; roots: [${rootFiles.join(', ')}]`);
@@ -195,7 +203,10 @@ class LspServer {
 
     // Map relatedInformation -> LSP relatedInformation when location available
     try {
-      if (Array.isArray(diag.relatedInformation) && diag.relatedInformation.length > 0) {
+      if (
+        Array.isArray(diag.relatedInformation) &&
+        diag.relatedInformation.length > 0
+      ) {
         const riList = [];
         for (const ri of diag.relatedInformation) {
           try {
@@ -205,8 +216,16 @@ class LspServer {
               end: { line: 0, character: 0 },
             };
 
-            if (ri?.file && typeof ri.file === 'object' && typeof ri.file.fileName === 'string') {
-              riUri = `file://${ri.file.fileName.startsWith('/') ? ri.file.fileName : ri.file.fileName}`;
+            if (
+              ri?.file &&
+              typeof ri.file === 'object' &&
+              typeof ri.file.fileName === 'string'
+            ) {
+              riUri = `file://${
+                ri.file.fileName.startsWith('/')
+                  ? ri.file.fileName
+                  : ri.file.fileName
+              }`;
               if (typeof ri.start === 'number') {
                 const pos = ts.getLineAndCharacterOfPosition(ri.file, ri.start);
                 riRange = {
@@ -264,11 +283,15 @@ class LspServer {
     try {
       program = this.#env.languageService.getProgram();
     } catch (e) {
-      postLog(`getProgram() failed before diagnostics: ${e?.message ?? String(e)}`);
+      postLog(
+        `getProgram() failed before diagnostics: ${e?.message ?? String(e)}`
+      );
     }
 
-    const syntactic = this.#env.languageService.getSyntacticDiagnostics(path) || [];
-    const semantic = this.#env.languageService.getSemanticDiagnostics(path) || [];
+    const syntactic =
+      this.#env.languageService.getSyntacticDiagnostics(path) || [];
+    const semantic =
+      this.#env.languageService.getSemanticDiagnostics(path) || [];
     const all = [...syntactic, ...semantic];
 
     if (all.length > 0) {
@@ -276,14 +299,20 @@ class LspServer {
       for (const d of all) {
         try {
           const msg = ts.flattenDiagnosticMessageText(d.messageText, '\n');
-          postLog(`  - code:${d.code} start:${d.start ?? '-'} len:${d.length ?? '-'} msg:${msg}`);
+          postLog(
+            `  - code:${d.code} start:${d.start ?? '-'} len:${
+              d.length ?? '-'
+            } msg:${msg}`
+          );
         } catch (e) {
           postLog(`  - (failed to stringify diag) ${String(e?.message ?? e)}`);
         }
       }
     }
 
-    const diagnostics = all.map((d) => this.#mapTsDiagnosticToLsp(d, path, program));
+    const diagnostics = all.map((d) =>
+      this.#mapTsDiagnosticToLsp(d, path, program)
+    );
 
     postLog(`Publishing ${diagnostics.length} diagnostics for ${path}`);
     self.postMessage({
