@@ -196,13 +196,16 @@ class VfsCoreClass {
   isReady() {
     return !!(this.#vfsReady && this.#cachedDefaultMap);
   }
-  static getEnvInfo() {
-  return {
-    envId: this.#env?.id ?? null,
-    defaultMapSize: this.#defaultMap?.size ?? 0,
-  };
+
+  getEnvInfo() {
+    return {
+      envId: this.#env?.id ?? null,
+      defaultMapSize: this.#defaultMap?.size ?? 0,
+    };
+  }
+
 }
-}
+
 
 // シングルトンインスタンスをエクスポート(既存コード互換のために名前は VfsCore)
 export const VfsCore = new VfsCoreClass();
