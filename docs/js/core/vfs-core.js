@@ -1,5 +1,8 @@
 // core/vfs-core.js
 // v0.0.3.2
+// - クラス化された VfsCore 実装(プライベートフィールド主体)
+// - テスト用に env に一意 ID を付与して保持する仕組みを追加
+// - 既存モジュール互換性のために単一インスタンスをエクスポートし、旧 API をバインドして提供
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
@@ -7,12 +10,15 @@ import { postLog } from '../util/logger.js';
 import { sleep } from '../util/async-utils.js';
 
 class VfsCoreClass {
-  // private state(インスタンス内に隠蔽)
-  #cachedDefaultMap = null;
+  // private state
+  #cachedDefaultMap = null; // Map<string,string>
   #vfsReady = false;
   #ensurePromise = null;
+  #nextEnvId = 0; // createEnvironment で付与する一意 ID のカウンタ
+  #lastEnv = null; // 最後に作成(返却)した env を保持(テスト用に参照可能にする)
+  #lastRootPaths = []; // lastEnv の rootPaths をキャッシュ(デバッグ/テスト用)
 
-  // private: パス正規化
+  // パス正規化(file:// を排除し先頭 / を付与)
   #normalizeVfsPath(p) {
     if (!p) return '';
     let s = String(p).replace(/^file:\/\//, '');
@@ -20,12 +26,12 @@ class VfsCoreClass {
     return s;
   }
 
-  // private: map の浅いクローン
+  // Map の浅いクローン
   #mapClone(src) {
     return new Map(src);
   }
 
-  // private: CDN から defaultMap を取得(リトライ付き)
+  // CDN から defaultMap を取得する内部ユーティリティ(リトライ付き)
   async #createDefaultMapWithRetries(retryCount = 3, perAttemptTimeoutMs = 5000) {
     let lastError = null;
     for (let attempt = 1; attempt <= retryCount; attempt++) {
@@ -69,7 +75,7 @@ class VfsCoreClass {
     throw lastError || new Error('VFS init failed after retries');
   }
 
-  // public: ensure defaultMap が準備されるまで待つ
+  // public: defaultMap が準備されるまで待つ(既存 ensureReady と互換)
   async ensureReady(retry = 3, timeoutMs = 5000) {
     if (this.#vfsReady && this.#cachedDefaultMap) {
       postLog('Using existing cachedDefaultMap (already ready)');
@@ -97,12 +103,12 @@ class VfsCoreClass {
     return this.#ensurePromise;
   }
 
-  // public: defaultMap を返す(テストや外部参照用)
+  // public: 現在の defaultMap を返す(テストや外部参照向け)
   getDefaultMap() {
     return this.#cachedDefaultMap;
   }
 
-  // public: デフォルト compilerOptions
+  // public: デフォルトの compilerOptions
   getDefaultCompilerOptions() {
     return {
       target: ts.ScriptTarget.ES2022,
@@ -119,15 +125,19 @@ class VfsCoreClass {
     };
   }
 
-  // public: VFS 環境を作成して返す
+  /**
+   * public: VFS 環境を作成して返す
+   * - 既存 createEnvironment と互換になるように設計
+   * - 返却する env に一意の __vfsId を付与して保持(テストで env の同一性を比較できるようにする)
+   */
   createEnvironment(compilerOptions = {}, rootFiles = [], initialFiles = {}) {
     if (!this.#cachedDefaultMap) {
       throw new Error('VFS not initialized. Call ensureReady() first.');
     }
 
     const mapForEnv = this.#mapClone(this.#cachedDefaultMap);
-    const normalizedInitialFiles = {};
 
+    const normalizedInitialFiles = {};
     for (const [rawKey, content] of Object.entries(initialFiles || {})) {
       try {
         const key = this.#normalizeVfsPath(rawKey);
@@ -146,6 +156,7 @@ class VfsCoreClass {
 
     const system = vfs.createSystem(mapForEnv);
     const rootPaths = (rootFiles || []).map((r) => this.#normalizeVfsPath(r));
+
     const defaultOptions = this.getDefaultCompilerOptions();
     const opts = Object.assign({}, defaultOptions, compilerOptions);
 
@@ -158,9 +169,17 @@ class VfsCoreClass {
     );
 
     const env = vfs.createVirtualTypeScriptEnvironment(system, rootPaths, ts, opts);
-    postLog(`VFS environment created; roots: [${rootPaths.join(', ')}]`);
 
-    // 同期的に内容を反映
+    // env に一意 ID を付与して保持(@typescript/vfs の env にフィールドを付与)
+    if (!env.__vfsId) {
+      env.__vfsId = ++this.#nextEnvId;
+    }
+    this.#lastEnv = env;
+    this.#lastRootPaths = rootPaths.slice();
+
+    postLog(`VFS environment created; roots: [${rootPaths.join(', ')}] (envId=${env.__vfsId})`);
+
+    // 同期的に初期ファイル内容を反映(createFile/updateFile)
     for (const [path, content] of Object.entries(normalizedInitialFiles)) {
       try {
         if (env.getSourceFile && env.getSourceFile(path)) {
@@ -189,25 +208,28 @@ class VfsCoreClass {
     this.#cachedDefaultMap = null;
     this.#vfsReady = false;
     this.#ensurePromise = null;
+    this.#nextEnvId = 0;
+    this.#lastEnv = null;
+    this.#lastRootPaths = [];
     postLog('VfsCore resetForTest() called');
   }
 
-  // public: 現在準備済みか(外部参照用)
+  // public: 準備済みかどうか
   isReady() {
     return !!(this.#vfsReady && this.#cachedDefaultMap);
   }
 
+  // public: テスト用の env 情報を返す
   getEnvInfo() {
     return {
-      envId: this.#env?.id ?? null,
-      defaultMapSize: this.#defaultMap?.size ?? 0,
+      envId: this.#lastEnv?.__vfsId ?? null,
+      defaultMapSize: this.#cachedDefaultMap?.size ?? 0,
+      lastRootPaths: this.#lastRootPaths.slice(),
     };
   }
-
 }
 
-
-// シングルトンインスタンスをエクスポート(既存コード互換のために名前は VfsCore)
+// シングルトンインスタンスをエクスポート(既存コードからの互換のため)
 export const VfsCore = new VfsCoreClass();
 
 // 旧 API 互換: 関数としても呼べるようにバインドしておく
@@ -217,4 +239,4 @@ export const resetForTest = VfsCore.resetForTest.bind(VfsCore);
 export const getDefaultMap = VfsCore.getDefaultMap.bind(VfsCore);
 export const getDefaultCompilerOptions = VfsCore.getDefaultCompilerOptions.bind(VfsCore);
 export const isReady = VfsCore.isReady.bind(VfsCore);
-
+export const getEnvInfo = VfsCore.getEnvInfo.bind(VfsCore);
