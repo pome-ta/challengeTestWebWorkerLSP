@@ -1,5 +1,5 @@
 // worker.js
-// v0.0.3.2
+// v0.0.3.3
 
 import { VfsCore } from './core/vfs-core.js';
 import { LspCore } from './core/lsp-core.js';
@@ -15,13 +15,28 @@ setDebug(true);
 const handlers = {
   // VFS
   'vfs/ensureReady': async (params) => await VfsCore.ensureReady(),
-  
-  // テスト専用: VFS をリセットして単一インスタンス初期状態に戻す
-  'vfs/resetForTest': async () => { return VfsCore.resetForTest(); },
-  // テスト専用: テスト専用内部情報の取得
-  'vfs/_getEnvInfo': async () => { return VfsCore.getEnvInfo(); },
-  
 
+  // テスト専用: VFS をリセットして単一インスタンス初期状態に戻す
+  'vfs/resetForTest': async () => {
+    return VfsCore.resetForTest();
+  },
+  // テスト専用: テスト専用内部情報の取得
+  'vfs/_getEnvInfo': async () => {
+    return VfsCore.getEnvInfo();
+  },
+
+  'vfs/openFile': async (params) => {
+    const { path, content } = params;
+    return VfsCore.openFile(path, content);
+  },
+  
+  'vfs/createEnvironment': async (params) => {
+    return VfsCore.createEnvironment(
+      params.compilerOptions,
+      params.rootFiles,
+      params.initialFiles
+    );
+  },
 
   // LSP lifecycle / utility
   'lsp/ping': async () => 'pong',

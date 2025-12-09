@@ -1,8 +1,5 @@
 // core/vfs-core.js
-// v0.0.3.2
-// - クラス化された VfsCore 実装(プライベートフィールド主体)
-// - テスト用に env に一意 ID を付与して保持する仕組みを追加
-// - 既存モジュール互換性のために単一インスタンスをエクスポートし、旧 API をバインドして提供
+// v0.0.3.3
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
@@ -11,6 +8,7 @@ import { sleep } from '../util/async-utils.js';
 
 class VfsCoreClass {
   // private state
+  #env = null;
   #cachedDefaultMap = null; // Map<string,string>
   #vfsReady = false;
   #ensurePromise = null;
@@ -37,9 +35,7 @@ class VfsCoreClass {
     for (let attempt = 1; attempt <= retryCount; attempt++) {
       postLog(`VFS init attempt ${attempt}/${retryCount}`);
       try {
-        const timeout = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs)
-        );
+        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs));
 
         const defaultMap = await Promise.race([
           vfs.createDefaultMapFromCDN(
@@ -49,7 +45,7 @@ class VfsCoreClass {
             },
             ts.version,
             false,
-            ts
+            ts,
           ),
           timeout,
         ]);
@@ -86,10 +82,7 @@ class VfsCoreClass {
     this.#ensurePromise = (async () => {
       try {
         if (!this.#cachedDefaultMap) {
-          this.#cachedDefaultMap = await this.#createDefaultMapWithRetries(
-            retry,
-            timeoutMs
-          );
+          this.#cachedDefaultMap = await this.#createDefaultMapWithRetries(retry, timeoutMs);
         } else {
           postLog('Using existing cachedDefaultMap (populate)');
         }
@@ -146,11 +139,7 @@ class VfsCoreClass {
         mapForEnv.set(key, data);
         postLog(`createEnvironment: injected initial file: ${key}`);
       } catch (e) {
-        postLog(
-          `createEnvironment: failed to inject initial file ${rawKey}: ${String(
-            e?.message ?? e
-          )}`
-        );
+        postLog(`createEnvironment: failed to inject initial file ${rawKey}: ${String(e?.message ?? e)}`);
       }
     }
 
@@ -161,11 +150,9 @@ class VfsCoreClass {
     const opts = Object.assign({}, defaultOptions, compilerOptions);
 
     postLog(
-      `createEnvironment: about to create env; roots: [${rootPaths.join(
-        ', '
-      )}], initialFiles: [${Object.keys(normalizedInitialFiles).join(
-        ', '
-      )}], opts: ${JSON.stringify(opts)}`
+      `createEnvironment: about to create env; roots: [${rootPaths.join(', ')}], initialFiles: [${Object.keys(
+        normalizedInitialFiles,
+      ).join(', ')}], opts: ${JSON.stringify(opts)}`,
     );
 
     const env = vfs.createVirtualTypeScriptEnvironment(system, rootPaths, ts, opts);
@@ -176,6 +163,7 @@ class VfsCoreClass {
     }
     this.#lastEnv = env;
     this.#lastRootPaths = rootPaths.slice();
+    this.#env = env; // 正式に保持
 
     postLog(`VFS environment created; roots: [${rootPaths.join(', ')}] (envId=${env.__vfsId})`);
 
@@ -188,9 +176,7 @@ class VfsCoreClass {
           env.createFile(path, content);
         }
       } catch (e) {
-        postLog(
-          `createEnvironment sync apply failed for ${path}: ${String(e?.message ?? e)}`
-        );
+        postLog(`createEnvironment sync apply failed for ${path}: ${String(e?.message ?? e)}`);
       }
     }
 
@@ -201,6 +187,21 @@ class VfsCoreClass {
     }
 
     return env;
+  }
+
+  getEnv() {
+    return this.#env;
+  }
+
+  openFile(path, content) {
+    if (!this.#env) throw new Error('VFS env not created');
+    const normalized = this.#normalizeVfsPath(path);
+    if (this.#env.getSourceFile(normalized)) {
+      this.#env.updateFile(normalized, content);
+    } else {
+      this.#env.createFile(normalized, content);
+    }
+    return { ok: true };
   }
 
   // public: テスト用に状態をリセット
@@ -240,3 +241,4 @@ export const getDefaultMap = VfsCore.getDefaultMap.bind(VfsCore);
 export const getDefaultCompilerOptions = VfsCore.getDefaultCompilerOptions.bind(VfsCore);
 export const isReady = VfsCore.isReady.bind(VfsCore);
 export const getEnvInfo = VfsCore.getEnvInfo.bind(VfsCore);
+export const openFile = VfsCore.openFile.bind(VfsCore);
