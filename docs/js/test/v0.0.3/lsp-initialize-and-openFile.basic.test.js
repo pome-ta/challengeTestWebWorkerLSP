@@ -27,10 +27,19 @@ console.log('🧩 lsp-initialize-and-openFile.basic.test loaded');
     const content = `export const v = 1;`;
 
     sendNotification(worker, 'textDocument/didOpen', {
-      textDocument: { uri: fileUri, languageId: 'typescript', version: 1, text: content },
+      textDocument: {
+        uri: fileUri,
+        languageId: 'typescript',
+        version: 1,
+        text: content,
+      },
     });
 
-    const diag = await waitForNotification(worker, 'textDocument/publishDiagnostics', (p) => p.uri === fileUri);
+    const diag = await waitForNotification(
+      worker,
+      'textDocument/publishDiagnostics',
+      (p) => p.uri === fileUri
+    );
     expect(diag.uri).to.equal(fileUri);
     expect(diag.diagnostics).to.be.an('array');
 

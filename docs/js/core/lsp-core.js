@@ -102,7 +102,9 @@ class LspServer {
     const initialFiles = {};
     for (const [uri, { text }] of this.#openFiles.entries()) {
       let path = this.#uriToPath(uri);
-      if (!path.startsWith('/')) path = `/${path}`;
+      if (!path.startsWith('/')) {
+        path = `/${path}`;
+      }
       rootFiles.push(path);
       initialFiles[path] = text;
     }

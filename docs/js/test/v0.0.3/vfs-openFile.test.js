@@ -6,8 +6,6 @@ import {
   createTestWorker,
   waitForWorkerReady,
   sendRequest,
-  sendNotification,
-  waitForNotification,
   addResult,
 } from './test-utils.js';
 

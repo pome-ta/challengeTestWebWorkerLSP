@@ -18,9 +18,13 @@ class VfsCoreClass {
 
   // パス正規化(file:// を排除し先頭 / を付与)
   #normalizeVfsPath(p) {
-    if (!p) return '';
+    if (!p) {
+      return '';
+    }
     let s = String(p).replace(/^file:\/\//, '');
-    if (!s.startsWith('/')) s = `/${s}`;
+    if (!s.startsWith('/')) {
+      s = `/${s}`;
+    }
     return s;
   }
 
@@ -30,12 +34,17 @@ class VfsCoreClass {
   }
 
   // CDN から defaultMap を取得する内部ユーティリティ(リトライ付き)
-  async #createDefaultMapWithRetries(retryCount = 3, perAttemptTimeoutMs = 5000) {
+  async #createDefaultMapWithRetries(
+    retryCount = 3,
+    perAttemptTimeoutMs = 5000
+  ) {
     let lastError = null;
     for (let attempt = 1; attempt <= retryCount; attempt++) {
       postLog(`VFS init attempt ${attempt}/${retryCount}`);
       try {
-        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs));
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs)
+        );
 
         const defaultMap = await Promise.race([
           vfs.createDefaultMapFromCDN(
@@ -45,7 +54,7 @@ class VfsCoreClass {
             },
             ts.version,
             false,
-            ts,
+            ts
           ),
           timeout,
         ]);
@@ -81,12 +90,17 @@ class VfsCoreClass {
       }
       return;
     }
-    if (this.#ensurePromise) return this.#ensurePromise;
+    if (this.#ensurePromise) {
+      return this.#ensurePromise;
+    }
 
     this.#ensurePromise = (async () => {
       try {
         if (!this.#cachedDefaultMap) {
-          this.#cachedDefaultMap = await this.#createDefaultMapWithRetries(retry, timeoutMs);
+          this.#cachedDefaultMap = await this.#createDefaultMapWithRetries(
+            retry,
+            timeoutMs
+          );
         } else {
           postLog('Using existing cachedDefaultMap (populate)');
         }
@@ -148,7 +162,11 @@ class VfsCoreClass {
         mapForEnv.set(key, data);
         postLog(`createEnvironment: injected initial file: ${key}`);
       } catch (e) {
-        postLog(`createEnvironment: failed to inject initial file ${rawKey}: ${String(e?.message ?? e)}`);
+        postLog(
+          `createEnvironment: failed to inject initial file ${rawKey}: ${String(
+            e?.message ?? e
+          )}`
+        );
       }
     }
 
@@ -159,12 +177,19 @@ class VfsCoreClass {
     const opts = Object.assign({}, defaultOptions, compilerOptions);
 
     postLog(
-      `createEnvironment: about to create env; roots: [${rootPaths.join(', ')}], initialFiles: [${Object.keys(
-        normalizedInitialFiles,
-      ).join(', ')}], opts: ${JSON.stringify(opts)}`,
+      `createEnvironment: about to create env; roots: [${rootPaths.join(
+        ', '
+      )}], initialFiles: [${Object.keys(normalizedInitialFiles).join(
+        ', '
+      )}], opts: ${JSON.stringify(opts)}`
     );
 
-    const env = vfs.createVirtualTypeScriptEnvironment(system, rootPaths, ts, opts);
+    const env = vfs.createVirtualTypeScriptEnvironment(
+      system,
+      rootPaths,
+      ts,
+      opts
+    );
 
     // env に一意 ID を付与して保持(@typescript/vfs の env にフィールドを付与)
     if (!env.__vfsId) {
@@ -174,7 +199,11 @@ class VfsCoreClass {
     this.#lastRootPaths = rootPaths.slice();
     this.#env = env; // 正式に保持
 
-    postLog(`VFS environment created; roots: [${rootPaths.join(', ')}] (envId=${env.__vfsId})`);
+    postLog(
+      `VFS environment created; roots: [${rootPaths.join(', ')}] (envId=${
+        env.__vfsId
+      })`
+    );
 
     // 同期的に初期ファイル内容を反映(createFile/updateFile)
     for (const [path, content] of Object.entries(normalizedInitialFiles)) {
@@ -185,14 +214,20 @@ class VfsCoreClass {
           env.createFile(path, content);
         }
       } catch (e) {
-        postLog(`createEnvironment sync apply failed for ${path}: ${String(e?.message ?? e)}`);
+        postLog(
+          `createEnvironment sync apply failed for ${path}: ${String(
+            e?.message ?? e
+          )}`
+        );
       }
     }
 
     try {
       env.languageService.getProgram();
     } catch (e) {
-      postLog(`getProgram() failed after env creation: ${String(e?.message ?? e)}`);
+      postLog(
+        `getProgram() failed after env creation: ${String(e?.message ?? e)}`
+      );
     }
 
     return env;
@@ -203,7 +238,9 @@ class VfsCoreClass {
   }
 
   openFile(path, content) {
-    if (!this.#env) throw new Error('VFS env not created');
+    if (!this.#env) {
+      throw new Error('VFS env not created');
+    }
     const normalized = this.#normalizeVfsPath(path);
     if (this.#env.getSourceFile(normalized)) {
       this.#env.updateFile(normalized, content);
@@ -239,7 +276,9 @@ class VfsCoreClass {
   }
 
   _getFile(path) {
-    if (!this.#env) throw new Error('VFS env not created');
+    if (!this.#env) {
+      throw new Error('VFS env not created');
+    }
     const normalized = this.#normalizeVfsPath(path);
     const sf = this.#env.getSourceFile(normalized);
     if (!sf) {
@@ -260,8 +299,9 @@ export const ensureReady = VfsCore.ensureReady.bind(VfsCore);
 export const createEnvironment = VfsCore.createEnvironment.bind(VfsCore);
 export const resetForTest = VfsCore.resetForTest.bind(VfsCore);
 export const getDefaultMap = VfsCore.getDefaultMap.bind(VfsCore);
-export const getDefaultCompilerOptions = VfsCore.getDefaultCompilerOptions.bind(VfsCore);
+export const getDefaultCompilerOptions =
+  VfsCore.getDefaultCompilerOptions.bind(VfsCore);
 export const isReady = VfsCore.isReady.bind(VfsCore);
 export const getEnvInfo = VfsCore.getEnvInfo.bind(VfsCore);
 export const openFile = VfsCore.openFile.bind(VfsCore);
-export const _getFile = VfsCore._getFile.bind(VfsCore); // ★追加
+export const _getFile = VfsCore._getFile.bind(VfsCore);
