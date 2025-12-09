@@ -29,13 +29,9 @@ const handlers = {
     const { path, content } = params;
     return VfsCore.openFile(path, content);
   },
-  
+
   'vfs/createEnvironment': async (params) => {
-    return VfsCore.createEnvironment(
-      params.compilerOptions,
-      params.rootFiles,
-      params.initialFiles
-    );
+    return VfsCore.createEnvironment(params.compilerOptions, params.rootFiles, params.initialFiles);
   },
 
   // LSP lifecycle / utility

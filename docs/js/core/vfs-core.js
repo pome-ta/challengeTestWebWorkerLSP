@@ -75,6 +75,10 @@ class VfsCoreClass {
   async ensureReady(retry = 3, timeoutMs = 5000) {
     if (this.#vfsReady && this.#cachedDefaultMap) {
       postLog('Using existing cachedDefaultMap (already ready)');
+      // env が無い場合は作る
+      if (!this.#env) {
+        this.createEnvironment();
+      }
       return;
     }
     if (this.#ensurePromise) return this.#ensurePromise;
@@ -87,6 +91,11 @@ class VfsCoreClass {
           postLog('Using existing cachedDefaultMap (populate)');
         }
         this.#vfsReady = true;
+        // ★ここで env を作る
+        if (!this.#env) {
+          this.createEnvironment();
+        }
+
         postLog('VFS ensureReady complete');
       } finally {
         this.#ensurePromise = null;
@@ -201,7 +210,7 @@ class VfsCoreClass {
     } else {
       this.#env.createFile(normalized, content);
     }
-    return { ok: true };
+    return { ok: true, path: normalized }; // ★ path を追加
   }
 
   // public: テスト用に状態をリセット
