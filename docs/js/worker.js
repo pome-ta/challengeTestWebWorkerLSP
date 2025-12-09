@@ -33,6 +33,7 @@ const handlers = {
   'vfs/createEnvironment': async (params) => {
     return VfsCore.createEnvironment(params.compilerOptions, params.rootFiles, params.initialFiles);
   },
+  'vfs/_getFile': (params) => VfsCore._getFile(params.path),
 
   // LSP lifecycle / utility
   'lsp/ping': async () => 'pong',

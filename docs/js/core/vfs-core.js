@@ -237,6 +237,19 @@ class VfsCoreClass {
       lastRootPaths: this.#lastRootPaths.slice(),
     };
   }
+
+  _getFile(path) {
+    if (!this.#env) throw new Error('VFS env not created');
+    const normalized = this.#normalizeVfsPath(path);
+    const sf = this.#env.getSourceFile(normalized);
+    if (!sf) {
+      return { path: normalized, content: null };
+    }
+    return {
+      path: normalized,
+      content: sf.text ?? null,
+    };
+  }
 }
 
 // シングルトンインスタンスをエクスポート(既存コードからの互換のため)
@@ -251,3 +264,4 @@ export const getDefaultCompilerOptions = VfsCore.getDefaultCompilerOptions.bind(
 export const isReady = VfsCore.isReady.bind(VfsCore);
 export const getEnvInfo = VfsCore.getEnvInfo.bind(VfsCore);
 export const openFile = VfsCore.openFile.bind(VfsCore);
+export const _getFile = VfsCore._getFile.bind(VfsCore); // ★追加
