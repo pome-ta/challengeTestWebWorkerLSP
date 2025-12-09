@@ -31,7 +31,11 @@ const handlers = {
   },
 
   'vfs/createEnvironment': async (params) => {
-    return VfsCore.createEnvironment(params.compilerOptions, params.rootFiles, params.initialFiles);
+    return VfsCore.createEnvironment(
+      params.compilerOptions,
+      params.rootFiles,
+      params.initialFiles
+    );
   },
   'vfs/_getFile': (params) => VfsCore._getFile(params.path),
 
@@ -84,7 +88,8 @@ async function handleJsonRpcMessage(msg) {
   // - lsp/* except initialize/ping/shutdown require VFS
   const requiresVfs =
     method.startsWith('textDocument/') ||
-    (method.startsWith('lsp/') && !['lsp/initialize', 'lsp/ping', 'lsp/shutdown'].includes(method));
+    (method.startsWith('lsp/') &&
+      !['lsp/initialize', 'lsp/ping', 'lsp/shutdown'].includes(method));
 
   if (requiresVfs && !VfsCore.isReady()) {
     const message = 'VFS not ready. Call `vfs/ensureReady` first.';
