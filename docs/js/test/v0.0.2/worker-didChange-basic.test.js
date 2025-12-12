@@ -14,7 +14,8 @@ import {
 console.log('🧩 worker-didChange-basic.test loaded');
 
 (async () => {
-  const testName = 'LSP: didChange basic full-replace should update diagnostics';
+  const testName =
+    'LSP: didChange basic full-replace should update diagnostics';
   let worker;
 
   try {
@@ -72,7 +73,7 @@ console.log('🧩 worker-didChange-basic.test loaded');
     expect(changedDiag.uri).to.equal(fileUri);
     expect(changedDiag.diagnostics).to.be.an('array').with.lengthOf(1);
     expect(changedDiag.diagnostics[0].message).to.include(
-      'Type \'string\' is not assignable to type \'number\''
+      "Type 'string' is not assignable to type 'number'"
     );
 
     addResult(testName, true);

@@ -14,7 +14,8 @@ import {
 console.log('🧩 worker-didChange-incremental-min.test loaded');
 
 (async () => {
-  const testName = 'LSP: didChange incremental minimal range-update should update diagnostics';
+  const testName =
+    'LSP: didChange incremental minimal range-update should update diagnostics';
   let worker;
 
   try {
