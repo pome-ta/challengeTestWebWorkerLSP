@@ -1,64 +1,64 @@
 <!DOCTYPE html>
 <html lang="ja">
-  <head>
-    <meta charset="utf-8" />
-    <meta
+<head>
+  <meta charset="utf-8"/>
+  <meta
       name="viewport"
       content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no"
-    />
+  />
 
-    <script type="importmap">
-      {
-        "imports": {
-          "eruda": "https://esm.sh/eruda",
-          "chai": "https://esm.sh/chai@5.1.1"
-        }
+  <script type="importmap">
+    {
+      "imports": {
+        "eruda": "https://esm.sh/eruda",
+        "chai": "https://esm.sh/chai@5.1.1"
       }
-    </script>
+    }
+  </script>
 
-    <!-- eruda -->
-    <script type="module">
-      import eruda from 'eruda';
+  <!-- eruda -->
+  <script type="module">
+    import eruda from 'eruda';
 
-      //window.eruda = eruda;
-      //window.eruda.init();
-      eruda.init();
-    </script>
+    //window.eruda = eruda;
+    //window.eruda.init();
+    eruda.init();
+  </script>
 
-    <link rel="stylesheet" href="./css/style.css" />
-    <style>
-      body {
-        font-family: Consolas, Menlo, Monaco, source-code-pro, 'Courier New',
-          monospace;
-      }
-    </style>
+  <link rel="stylesheet" href="./css/style.css"/>
+  <style>
+    body {
+      font-family: Consolas, Menlo, Monaco, source-code-pro, 'Courier New',
+      monospace;
+    }
+  </style>
 
-    <script type="module" src="./js/main.js" defer></script>
-    <script type="module" src="./js/test/test-runner.js" defer></script>
+  <script type="module" src="./js/main.js" defer></script>
+  <script type="module" src="./js/test/test-runner.js" defer></script>
 
-    <title>Browser TDD Runner</title>
-  </head>
-  <body>
-    <button
-      id="getlog"
-      style="
+  <title>Browser TDD Runner</title>
+</head>
+<body>
+<button
+    id="getlog"
+    style="
         width: 88%;
         height: 4rem;
         display: block;
         margin: 0 auto;
         margin: 1rem auto;
       "
-    >
-      get log
-    </button>
-    <h1>Browser TDD Runner</h1>
-    <div id="results">
-      <ol id="testOrdered"></ol>
-    </div>
-    <button id="copylog" style="padding: 1rem">copy</button>
-    <div
-      id="outdiv"
-      style="
+>
+  get log
+</button>
+<h1>Browser TDD Runner</h1>
+<div id="results">
+  <ol id="testOrdered"></ol>
+</div>
+<button id="copylog" style="padding: 1rem">copy</button>
+<div
+    id="outdiv"
+    style="
         background: #1d2020;
         color: #fff;
         width: 88%;
@@ -68,26 +68,26 @@
         border-radius: 0.8rem;
         padding: 1rem;
       "
-    ></div>
-    <script>
-      const outdiv = document.getElementById('outdiv');
-      const getbtn = document.getElementById('getlog');
-      const cpybtn = document.getElementById('copylog');
-      getbtn.addEventListener('click', (e) => {
-        const erudaShadow = document.getElementById('eruda').shadowRoot;
-        const lunaConsoleLogContents = erudaShadow.querySelectorAll(
-          '.luna-console-log-content'
-        );
-        lunaConsoleLogContents.forEach((content) => {
-          //outdiv.appendChild(content.cloneNode(true));
-          outdiv.appendChild(content);
-        });
-      });
-      cpybtn.addEventListener('click', (e) => {
-        const innerText = outdiv.innerText;
-        const copyblock = '```' + '\n' + innerText + '\n' + '```';
-        navigator.clipboard.writeText(copyblock).then();
-      });
-    </script>
-  </body>
+></div>
+<script>
+  const outdiv = document.getElementById('outdiv');
+  const getbtn = document.getElementById('getlog');
+  const cpybtn = document.getElementById('copylog');
+  getbtn.addEventListener('click', (e) => {
+    const erudaShadow = document.getElementById('eruda').shadowRoot;
+    const lunaConsoleLogContents = erudaShadow.querySelectorAll(
+      '.luna-console-log-content'
+    );
+    lunaConsoleLogContents.forEach((content) => {
+      //outdiv.appendChild(content.cloneNode(true));
+      outdiv.appendChild(content);
+    });
+  });
+  cpybtn.addEventListener('click', (e) => {
+    const innerText = outdiv.innerText;
+    const copyblock = '```' + '\n' + innerText + '\n' + '```';
+    navigator.clipboard.writeText(copyblock).then();
+  });
+</script>
+</body>
 </html>

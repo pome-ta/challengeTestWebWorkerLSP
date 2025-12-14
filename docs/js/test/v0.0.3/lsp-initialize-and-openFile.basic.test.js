@@ -1,14 +1,14 @@
 // test/v0.0.3/lsp-initialize-and-openFile.basic.test.js
 // v0.0.3.1
 
-import { expect } from 'chai';
+import {expect} from 'chai';
 import {
-  createTestWorker,
-  waitForWorkerReady,
-  sendRequest,
-  sendNotification,
-  waitForNotification,
   addResult,
+  createTestWorker,
+  sendNotification,
+  sendRequest,
+  waitForNotification,
+  waitForWorkerReady,
 } from './test-utils.js';
 
 console.log('🧩 lsp-initialize-and-openFile.basic.test loaded');
@@ -21,7 +21,7 @@ console.log('🧩 lsp-initialize-and-openFile.basic.test loaded');
 
     await waitForWorkerReady(worker);
     await sendRequest(worker, 'vfs/ensureReady');
-    await sendRequest(worker, 'lsp/initialize', { capabilities: {} });
+    await sendRequest(worker, 'lsp/initialize', {capabilities: {}});
 
     const fileUri = 'file:///basic-open.ts';
     const content = `export const v = 1;`;

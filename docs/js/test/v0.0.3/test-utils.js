@@ -9,7 +9,7 @@ let requestId = 0;
  * @returns {Worker}
  */
 export const createTestWorker = (path, onLog) => {
-  const worker = new Worker(path, { type: 'module' });
+  const worker = new Worker(path, {type: 'module'});
 
   worker.addEventListener('message', (event) => {
     const data = event.data || {};
@@ -85,7 +85,7 @@ export const sendRequest = (worker, method, params = {}, timeout = 30000) => {
     };
 
     worker.addEventListener('message', handler);
-    worker.postMessage({ jsonrpc: '2.0', id, method, params });
+    worker.postMessage({jsonrpc: '2.0', id, method, params});
   });
 };
 
@@ -96,7 +96,7 @@ export const sendRequest = (worker, method, params = {}, timeout = 30000) => {
  * @param {object} params
  */
 export const sendNotification = (worker, method, params = {}) => {
-  worker.postMessage({ jsonrpc: '2.0', method, params });
+  worker.postMessage({jsonrpc: '2.0', method, params});
 };
 
 /**

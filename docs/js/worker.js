@@ -1,10 +1,10 @@
 // worker.js
 // v0.0.3.3
 
-import { VfsCore } from './core/vfs-core.js';
-import { LspCore } from './core/lsp-core.js';
-import { JsonRpcErrorCode } from './core/error-codes.js';
-import { postLog, setDebug } from './util/logger.js';
+import {VfsCore} from './core/vfs-core.js';
+import {LspCore} from './core/lsp-core.js';
+import {JsonRpcErrorCode} from './core/error-codes.js';
+import {postLog, setDebug} from './util/logger.js';
 
 // Enable debug by default for test runner visibility
 setDebug(true);
@@ -26,7 +26,7 @@ const handlers = {
   },
 
   'vfs/openFile': async (params) => {
-    const { path, content } = params;
+    const {path, content} = params;
     return VfsCore.openFile(path, content);
   },
 
@@ -65,7 +65,7 @@ const handlers = {
  * @param {object} msg JSON-RPC message
  */
 async function handleJsonRpcMessage(msg) {
-  const { jsonrpc, id, method, params } = msg || {};
+  const {jsonrpc, id, method, params} = msg || {};
 
   if (jsonrpc !== '2.0' || typeof method !== 'string') {
     if (id) {
@@ -98,7 +98,7 @@ async function handleJsonRpcMessage(msg) {
       self.postMessage({
         jsonrpc: '2.0',
         id,
-        error: { code: JsonRpcErrorCode.ServerNotInitialized, message },
+        error: {code: JsonRpcErrorCode.ServerNotInitialized, message},
       });
     }
     return;
@@ -112,7 +112,7 @@ async function handleJsonRpcMessage(msg) {
       self.postMessage({
         jsonrpc: '2.0',
         id,
-        error: { code: JsonRpcErrorCode.MethodNotFound, message },
+        error: {code: JsonRpcErrorCode.MethodNotFound, message},
       });
     }
     return;
@@ -137,7 +137,7 @@ async function handleJsonRpcMessage(msg) {
       self.postMessage({
         jsonrpc: '2.0',
         id,
-        error: { code: JsonRpcErrorCode.ServerError, message },
+        error: {code: JsonRpcErrorCode.ServerError, message},
       });
     }
   }
@@ -145,7 +145,7 @@ async function handleJsonRpcMessage(msg) {
 
 // Message event listener
 self.addEventListener('message', async (event) => {
-  const { data } = event;
+  const {data} = event;
 
   // Toggle debug mode via simple string messages 'debug:on' | 'debug:off'
   if (typeof data === 'string' && data.startsWith('debug:')) {
@@ -167,4 +167,4 @@ self.addEventListener('message', async (event) => {
 
 // Announce ready
 postLog('Worker loaded and ready.');
-self.postMessage({ jsonrpc: '2.0', method: 'worker/ready' });
+self.postMessage({jsonrpc: '2.0', method: 'worker/ready'});

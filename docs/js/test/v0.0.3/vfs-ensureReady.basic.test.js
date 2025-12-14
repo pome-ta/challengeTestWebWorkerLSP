@@ -1,12 +1,7 @@
 // test/v0.0.3/vfs-ensureReady.basic.test.js
 // v0.0.3.0
 
-import {
-  createTestWorker,
-  waitForWorkerReady,
-  sendRequest,
-  addResult,
-} from './test-utils.js';
+import {addResult, createTestWorker, sendRequest, waitForWorkerReady,} from './test-utils.js';
 
 console.log('🧩 vfs-ensureReady.basic.test loaded');
 
