@@ -1,8 +1,13 @@
 // test/v0.0.3/vfs-openFile.test.js
 // v0.0.3.3
 
-import {expect} from 'chai';
-import {addResult, createTestWorker, sendRequest, waitForWorkerReady,} from './test-utils.js';
+import { expect } from 'chai';
+import {
+  addResult,
+  createTestWorker,
+  sendRequest,
+  waitForWorkerReady,
+} from './test-utils.js';
 
 console.log('🧩 vfs-openFile.test loaded');
 

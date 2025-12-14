@@ -2,8 +2,8 @@
 // v0.0.2.14
 
 import ts from 'https://esm.sh/typescript';
-import {VfsCore} from './vfs-core.js';
-import {postLog} from '../util/logger.js';
+import { VfsCore } from './vfs-core.js';
+import { postLog } from '../util/logger.js';
 
 class LspServer {
   #env = null;
@@ -22,11 +22,11 @@ class LspServer {
     const defaults = VfsCore.getDefaultCompilerOptions
       ? VfsCore.getDefaultCompilerOptions()
       : {
-        target: ts.ScriptTarget.ES2022,
-        module: ts.ModuleKind.ESNext,
-        moduleResolution: ts.ModuleResolutionKind.Bundler,
-        strict: true,
-      };
+          target: ts.ScriptTarget.ES2022,
+          module: ts.ModuleKind.ESNext,
+          moduleResolution: ts.ModuleResolutionKind.Bundler,
+          strict: true,
+        };
     return Object.assign({}, defaults, incoming || {});
   }
 
@@ -56,18 +56,18 @@ class LspServer {
   }
 
   async didOpen(params) {
-    const {uri, text, version} = params.textDocument;
+    const { uri, text, version } = params.textDocument;
     const path = this.#uriToPath(uri);
     postLog(`didOpen ${path} (version:${version})`);
 
-    this.#openFiles.set(uri, {text, version});
+    this.#openFiles.set(uri, { text, version });
     await this.#recreateEnv();
     // publish immediately (no debounce)
     await this.publishDiagnostics(uri);
   }
 
   async didChange(params) {
-    const {uri, version} = params.textDocument;
+    const { uri, version } = params.textDocument;
     const changes = params.contentChanges || [];
     const text = changes.length ? changes[changes.length - 1].text : undefined;
     if (typeof text !== 'string') {
@@ -77,13 +77,13 @@ class LspServer {
     const path = this.#uriToPath(uri);
     postLog(`didChange ${path} (version:${version})`);
 
-    this.#openFiles.set(uri, {text, version});
+    this.#openFiles.set(uri, { text, version });
     await this.#recreateEnv();
     await this.publishDiagnostics(uri);
   }
 
   async didClose(params) {
-    const {uri} = params.textDocument;
+    const { uri } = params.textDocument;
     const path = this.#uriToPath(uri);
     postLog(`didClose ${path}`);
 
@@ -100,7 +100,7 @@ class LspServer {
   async #recreateEnv() {
     const rootFiles = [];
     const initialFiles = {};
-    for (const [uri, {text}] of this.#openFiles.entries()) {
+    for (const [uri, { text }] of this.#openFiles.entries()) {
       let path = this.#uriToPath(uri);
       if (!path.startsWith('/')) {
         path = `/${path}`;
@@ -166,12 +166,12 @@ class LspServer {
     const startPos =
       sourceFile && typeof start === 'number'
         ? ts.getLineAndCharacterOfPosition(sourceFile, start)
-        : {line: 0, character: 0};
+        : { line: 0, character: 0 };
 
     const endPos =
       sourceFile && typeof start === 'number' && typeof length === 'number'
         ? ts.getLineAndCharacterOfPosition(sourceFile, start + length)
-        : {line: startPos.line, character: startPos.character};
+        : { line: startPos.line, character: startPos.character };
 
     const message = ts.flattenDiagnosticMessageText(diag.messageText, '\n');
 
@@ -196,7 +196,7 @@ class LspServer {
     }
 
     const lsp = {
-      range: {start: startPos, end: endPos},
+      range: { start: startPos, end: endPos },
       message,
       severity,
       source: 'ts',
@@ -214,8 +214,8 @@ class LspServer {
           try {
             let riUri = null;
             let riRange = {
-              start: {line: 0, character: 0},
-              end: {line: 0, character: 0},
+              start: { line: 0, character: 0 },
+              end: { line: 0, character: 0 },
             };
 
             if (
@@ -250,7 +250,7 @@ class LspServer {
 
             if (riUri) {
               riList.push({
-                location: {uri: riUri, range: riRange},
+                location: { uri: riUri, range: riRange },
                 message: riMsg,
               });
             }
@@ -320,7 +320,7 @@ class LspServer {
     self.postMessage({
       jsonrpc: '2.0',
       method: 'textDocument/publishDiagnostics',
-      params: {uri, diagnostics},
+      params: { uri, diagnostics },
     });
   }
 
@@ -328,7 +328,7 @@ class LspServer {
     self.postMessage({
       jsonrpc: '2.0',
       method: 'textDocument/publishDiagnostics',
-      params: {uri, diagnostics: []},
+      params: { uri, diagnostics: [] },
     });
   }
 

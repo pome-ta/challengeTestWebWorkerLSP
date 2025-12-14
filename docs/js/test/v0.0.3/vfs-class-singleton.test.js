@@ -1,8 +1,13 @@
 // test/v0.0.3/vfs-class-singleton.test.js
 // v0.0.3.2
 
-import {expect} from 'chai';
-import {addResult, createTestWorker, sendRequest, waitForWorkerReady,} from './test-utils.js';
+import { expect } from 'chai';
+import {
+  addResult,
+  createTestWorker,
+  sendRequest,
+  waitForWorkerReady,
+} from './test-utils.js';
 
 console.log('🧩 vfs-class-singleton.test loaded');
 

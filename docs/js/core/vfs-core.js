@@ -3,8 +3,8 @@
 
 import * as vfs from 'https://esm.sh/@typescript/vfs';
 import ts from 'https://esm.sh/typescript';
-import {postLog} from '../util/logger.js';
-import {sleep} from '../util/async-utils.js';
+import { postLog } from '../util/logger.js';
+import { sleep } from '../util/async-utils.js';
 
 class VfsCoreClass {
   // private state
@@ -247,7 +247,7 @@ class VfsCoreClass {
     } else {
       this.#env.createFile(normalized, content);
     }
-    return {ok: true, path: normalized}; // ★ path を追加
+    return { ok: true, path: normalized }; // ★ path を追加
   }
 
   // public: テスト用に状態をリセット
@@ -282,7 +282,7 @@ class VfsCoreClass {
     const normalized = this.#normalizeVfsPath(path);
     const sf = this.#env.getSourceFile(normalized);
     if (!sf) {
-      return {path: normalized, content: null};
+      return { path: normalized, content: null };
     }
     return {
       path: normalized,
