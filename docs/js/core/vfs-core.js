@@ -23,7 +23,9 @@ class VfsCoreClass {
     for (let attempt = 1; attempt <= retryCount; attempt++) {
       postLog(`VFS init attempt ${attempt}/${retryCount}`);
       try {
-        const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs));
+        const timeout = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs)
+        );
 
         const defaultMap = await Promise.race([
           createDefaultMapFromCDN(
@@ -33,7 +35,7 @@ class VfsCoreClass {
             },
             ts.version,
             false,
-            ts,
+            ts
           ),
           timeout,
         ]);
@@ -73,10 +75,12 @@ class VfsCoreClass {
 
   async #init() {
     this.#envId++;
-    
+
     const fsMap = await this.#createDefaultMapWithRetry();
     const system = createSystem(fsMap);
-    this.#env = createVirtualTypeScriptEnvironment(system, [], ts, { target: ts.ScriptTarget.ESNext });
+    this.#env = createVirtualTypeScriptEnvironment(system, [], ts, {
+      target: ts.ScriptTarget.ESNext,
+    });
 
     this.#ready = true;
   }
