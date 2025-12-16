@@ -1,5 +1,5 @@
 // test/v0.0.3/vfs-ensureReady-idempotent.test.js
-// v0.0.3.5
+// v0.0.3.4
 
 import { expect } from 'chai';
 import {

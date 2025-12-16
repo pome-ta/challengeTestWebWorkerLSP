@@ -22,6 +22,10 @@ const handlers = {
   'vfs/getEnvInfo': async () => {
     return VfsCore.getEnvInfo();
   },
+  'vfs/resetForTest': async () => {
+    VfsCore.resetForTest();
+    return { ok: true };
+  },
 
   // --- lsp ---
   'lsp/initialize': async (params) => {

@@ -1,5 +1,5 @@
 // test/v0.0.3/worker-ready-semantics.test.js
-// v0.0.3.x
+// v0.0.3.4
 
 import { expect } from 'chai';
 import {

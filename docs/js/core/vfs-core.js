@@ -15,6 +15,7 @@ class VfsCoreClass {
   #env = null;
   #ready = false;
   #initializing = null;
+  #envId = 0;
 
   // CDN から defaultMap を取得する内部ユーティリティ(リトライ付き)
   async #createDefaultMapWithRetry(retryCount = 3, perAttemptTimeoutMs = 5000) {
@@ -71,10 +72,10 @@ class VfsCoreClass {
   }
 
   async #init() {
+    this.#envId++;
+    
     const fsMap = await this.#createDefaultMapWithRetry();
-
     const system = createSystem(fsMap);
-
     this.#env = createVirtualTypeScriptEnvironment(system, [], ts, { target: ts.ScriptTarget.ESNext });
 
     this.#ready = true;
@@ -85,6 +86,7 @@ class VfsCoreClass {
       ready: this.#ready,
       hasEnv: this.#env !== null,
       tsVersion: ts.version,
+      envId: this.#envId,
     };
   }
 
@@ -92,6 +94,7 @@ class VfsCoreClass {
     this.#env = null;
     this.#ready = false;
     this.#initializing = null;
+    this.#envId = 0;
   }
 }
 
