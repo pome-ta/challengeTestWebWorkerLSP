@@ -25,7 +25,8 @@ console.log('🧩 vfs-ensureReady.test loaded');
 
     const info = await sendRequest(worker, 'vfs/getEnvInfo');
     expect(info.envId).to.be.a('number');
-    expect(info.defaultMapSize).to.be.greaterThan(0);
+    expect(info.ready).to.equal(true);
+    expect(info.hasEnv).to.equal(true);
 
     addResult(testName, true);
   } catch (err) {
