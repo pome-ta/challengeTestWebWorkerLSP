@@ -27,7 +27,13 @@ const handlers = {
     return { ok: true };
   },
 
-  'vfs/openFile': async (_params) => {
+  'vfs/openFile': async (params) => {
+    // 1 params validation(最優先)
+    if (!params || typeof params.uri !== 'string' || params.uri.length === 0 || typeof params.content !== 'string') {
+      throw Object.assign(new Error('Invalid params'), { code: -32602 });
+    }
+
+    // 2 VFS ready check
     if (!VfsCore.getEnvInfo().ready) {
       throw Object.assign(new Error('VFS is not ready'), { code: -32001 });
     }
