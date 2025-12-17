@@ -26,13 +26,15 @@ const handlers = {
     VfsCore.resetForTest();
     return { ok: true };
   },
-  
+
   'vfs/openFile': async (_params) => {
-    // todo: 中身は後で
-    throw Object.assign(
-      new Error('VFS is not ready'),
-      { code: -32001 }
-    );
+    if (!VfsCore.getEnvInfo().ready) {
+      throw Object.assign(new Error('VFS is not ready'), { code: -32001 });
+    }
+
+    // ここから先は仮実装でよい
+    // 中身はまだ何もしない
+    return { ok: true };
   },
 
   // --- lsp ---
@@ -70,7 +72,10 @@ self.onmessage = async (e) => {
       self.postMessage({
         jsonrpc: '2.0',
         id,
-        error: { code: -32000, message: err?.message ?? String(err) },
+        error: {
+          code: err?.code ?? -32000,
+          message: err?.message ?? String(err),
+        },
       });
     }
   }
