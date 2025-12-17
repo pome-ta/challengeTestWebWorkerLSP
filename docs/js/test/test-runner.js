@@ -13,4 +13,5 @@ console.log('🚀 test-runner.js loaded');
 
 import './v0.0.3/vfs-openFile.test.js';
 import './v0.0.3/vfs-openFile-invalid-params.test.js';
+import './v0.0.3/vfs-openFile-envId-stable.test.js';
 
