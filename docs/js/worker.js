@@ -26,6 +26,14 @@ const handlers = {
     VfsCore.resetForTest();
     return { ok: true };
   },
+  
+  'vfs/openFile': async (_params) => {
+    // todo: 中身は後で
+    throw Object.assign(
+      new Error('VFS is not ready'),
+      { code: -32001 }
+    );
+  },
 
   // --- lsp ---
   'lsp/initialize': async (params) => {

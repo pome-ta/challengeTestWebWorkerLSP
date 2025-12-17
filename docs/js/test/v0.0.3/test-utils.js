@@ -1,5 +1,5 @@
-// test/v0.0.2/test-utils.js
-// v0.0.2
+// test/v0.0.3/test-utils.js
+// v0.0.3
 
 let requestId = 0;
 
@@ -70,11 +70,6 @@ export const sendRequest = (worker, method, params = {}, timeout = 30000) => {
         clearTimeout(timer);
         worker.removeEventListener('message', handler);
         if (response.error) {
-          /*
-          reject(
-            new Error(response.error.message || JSON.stringify(response.error))
-          );
-          */
           const err = new Error(response.error.message || JSON.stringify(response.error));
           err.code = response.error.code;
           reject(err);
