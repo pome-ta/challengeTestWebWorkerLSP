@@ -14,9 +14,7 @@ export const createTestWorker = (path, onLog) => {
   worker.addEventListener('message', (event) => {
     const data = event.data || {};
     if (data?.method === 'worker/log' && data.params?.message) {
-      const formatted = `[${
-        data.params.timestamp ?? new Date().toISOString()
-      } | WorkerLog] ${data.params.message}`;
+      const formatted = `[${data.params.timestamp ?? new Date().toISOString()} | WorkerLog] ${data.params.message}`;
       console.log(formatted);
       onLog?.(formatted);
     }
@@ -36,10 +34,7 @@ export const createTestWorker = (path, onLog) => {
  */
 export const waitForWorkerReady = (worker, timeout = 5000) => {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error(`Worker ready timeout (${timeout}ms)`)),
-      timeout
-    );
+    const timer = setTimeout(() => reject(new Error(`Worker ready timeout (${timeout}ms)`)), timeout);
 
     const handler = (event) => {
       if (event.data?.method === 'worker/ready') {
@@ -75,9 +70,14 @@ export const sendRequest = (worker, method, params = {}, timeout = 30000) => {
         clearTimeout(timer);
         worker.removeEventListener('message', handler);
         if (response.error) {
+          /*
           reject(
             new Error(response.error.message || JSON.stringify(response.error))
           );
+          */
+          const err = new Error(response.error.message || JSON.stringify(response.error));
+          err.code = response.error.code;
+          reject(err);
         } else {
           resolve(response.result);
         }
@@ -111,25 +111,17 @@ export const waitForNotification = (
   worker,
   expectedMethod,
   paramsMatcher = () => true, // デフォルトでは常にtrueを返す
-  timeout = 5000
+  timeout = 5000,
 ) => {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
-      () =>
-        reject(
-          new Error(
-            `Timeout waiting for notification: ${expectedMethod} (${timeout}ms)`
-          )
-        ),
-      timeout
+      () => reject(new Error(`Timeout waiting for notification: ${expectedMethod} (${timeout}ms)`)),
+      timeout,
     );
 
     const handler = (event) => {
       const notification = event.data;
-      if (
-        notification?.method === expectedMethod &&
-        paramsMatcher(notification.params)
-      ) {
+      if (notification?.method === expectedMethod && paramsMatcher(notification.params)) {
         clearTimeout(timer);
         worker.removeEventListener('message', handler);
         resolve(notification.params);
