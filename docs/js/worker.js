@@ -10,6 +10,7 @@ import { postLog, setDebug } from './util/logger.js';
 setDebug(true);
 
 let lastDidOpen = null;
+let lastOpenedFile = null;
 let lastDidChange = null;
 
 let documentState = {
@@ -52,6 +53,15 @@ const handlers = {
       content: params.content,
     };
 
+    if (documentState.uri === params.uri) {
+      documentState.version += 1;
+    } else {
+      documentState.uri = params.uri;
+      documentState.version = 1;
+    }
+
+    documentState.text = params.content;
+
     return { ok: true };
   },
 
@@ -68,6 +78,20 @@ const handlers = {
       };
     }
 
+    if (documentState.version === 1) {
+      lastDidOpen = {
+        uri: documentState.uri,
+        version: 1,
+        text: documentState.text,
+      };
+    } else if (documentState.version > 1) {
+      lastDidChange = {
+        uri: documentState.uri,
+        version: documentState.version,
+        text: documentState.text,
+      };
+    }
+
     return result;
   },
   'textDocument/hover': async () => {
@@ -76,6 +100,10 @@ const handlers = {
   // --- lsp debug ---
   'lsp/_debug/getLastDidOpen': async () => {
     return lastDidOpen;
+  },
+
+  'lsp/_debug/getLastDidChange': async () => {
+    return lastDidChange;
   },
 };
 
