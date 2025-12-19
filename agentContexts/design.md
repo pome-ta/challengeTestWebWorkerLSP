@@ -2,7 +2,7 @@ design.md
 
 プロジェクト設計ドキュメント (v0.0.0.0 → 現在までの流れを含む)
 
-このファイルは root/aiContexts/design.md に配置する前提で作成されている。
+このファイルは root/agentContexts/design.md に配置する前提で作成されている。
 以下は、本プロジェクトの 歴史・背景・設計方針・構成 をまとめたもの。
 
 ⸻
@@ -37,13 +37,14 @@ v0.0.1.x（設計整理フェーズ）
 	•	coding-style.md（書き方の標準化）
 をプロジェクト直下に置く方針にした。
 	•	ChatGPT と安定して会話するための「設計ファイル運用ルール」も追加。
-	•	のちに、これらのファイルは root/aiContexts/ に移動する方針へ変更された。
+	•	のちに、これらのファイルは root/agentContexts/ に移動する方針へ変更された。
 
 v0.0.2.0〜
 	•	Worker 構造の最終整理を開始。
 	•	LSP 実装を CodeMirror に接続する準備を進めている段階。
 	•	worker 同期 (__ready vs initialize) 問題の再調整。
 	•	VFS コアの役割（core/vfs-core.js）の再定義が進行。
+	•	テスト環境の整備（test-runner.js, test-utils.js）。
 
 ⸻
 
@@ -52,7 +53,7 @@ v0.0.2.0〜
 プロジェクトの全体構造は以下のように整理されている。
 
 root/
-    aiContexts/
+    agentContexts/
         design.md        ← 本ファイル
         coding-style.md
 
@@ -62,11 +63,15 @@ root/
                 lsp-core.js
                 vfs-core.js
             test/
+                test-runner.js
+                v0.0.2/
+                    test-utils.js
             util/
+                logger.js
             worker.js
 
 ポイント:
-	•	設計とルールは root/aiContexts/ に集約して管理する。
+	•	設計とルールは root/agentContexts/ に集約して管理する。
 	•	実装は docs/js/ 配下に置く。
 	•	ChatGPT や Gemini Code Assist などに読み込ませやすい構造を優先している。
 
