@@ -18,4 +18,11 @@ console.log('🚀 test-runner.js loaded');
 // import './v0.0.3/vfs-openFile-visible-to-lsp.test.js';
 // import './v0.0.3/vfs-openFile-visible-to-lsp-hover.test.js';
 // import './v0.0.3/vfs-openFile-didOpen.test.js';
-import './v0.0.3/vfs-openFile-didChange.test.js';
+// import './v0.0.3/vfs-openFile-didChange.test.js';
+
+import './v0.0.3/phase5-openFile-before-init-no-didOpen.test.js';
+import './v0.0.3/phase5-openFile-after-init-didOpen.test.js';
+import './v0.0.3/phase5-openFile-after-init-didChange.test.js';
+import './v0.0.3/phase5-openFile-before-init-then-update-didChange.test.js';
+import './v0.0.3/phase5-openFile-before-init-then-update-didChange.test.js';
+

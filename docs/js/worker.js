@@ -1,23 +1,32 @@
 // worker.js
-// v0.0.3.5
+// v0.0.3.6
+// Phase 5 clean minimal implementation
 
 import { VfsCore } from './core/vfs-core.js';
 import { LspCore } from './core/lsp-core.js';
 import { postLog, setDebug } from './util/logger.js';
 
-// Enable debug by default for test runner visibility
 setDebug(true);
 
-// --- Phase 4: 観測用状態 ---
-let lastDidOpen = null;
-let lastDidChange = null;
+/* -------------------------
+ * Phase 5 state
+ * ------------------------- */
 
-// --- Phase 4: 単一ドキュメント状態 ---
+let isInitialized = false;
+
 const documentState = {
   uri: null,
   version: 0,
   text: null,
 };
+
+// debug observation (no side effects)
+let lastDidOpen = null;
+let lastDidChange = null;
+
+/* -------------------------
+ * RPC handlers
+ * ------------------------- */
 
 const handlers = {
   // --- lifecycle ---
@@ -35,11 +44,15 @@ const handlers = {
 
   'vfs/resetForTest': async () => {
     VfsCore.resetForTest();
+    isInitialized = false;
+
     documentState.uri = null;
     documentState.version = 0;
     documentState.text = null;
+
     lastDidOpen = null;
     lastDidChange = null;
+
     return { ok: true };
   },
 
@@ -59,14 +72,34 @@ const handlers = {
       throw Object.assign(new Error('VFS is not ready'), { code: -32001 });
     }
 
-    if (documentState.uri === params.uri) {
+    const { uri, content } = params;
+
+    // version management
+    if (documentState.uri === uri) {
       documentState.version += 1;
     } else {
-      documentState.uri = params.uri;
+      documentState.uri = uri;
       documentState.version = 1;
     }
 
-    documentState.text = params.content;
+    documentState.text = content;
+
+    // Phase 5: event-driven sync
+    if (isInitialized) {
+      if (documentState.version === 1) {
+        lastDidOpen = {
+          uri,
+          version: 1,
+          text: content,
+        };
+      } else {
+        lastDidChange = {
+          uri,
+          version: documentState.version,
+          text: content,
+        };
+      }
+    }
 
     return { ok: true };
   },
@@ -74,37 +107,15 @@ const handlers = {
   // --- lsp ---
   'lsp/initialize': async (params) => {
     const result = await LspCore.initialize(params);
-
-    /*
-      Phase 4 仕様:
-      - initialize 時点で documentState を評価
-      - version === 1 → didOpen
-      - version > 1  → didChange
-      NOTE:
-      この挙動は Phase 5 で LSP 標準フローに置き換える
-    */
-    if (documentState.uri) {
-      if (documentState.version === 1) {
-        lastDidOpen = {
-          uri: documentState.uri,
-          version: 1,
-          text: documentState.text,
-        };
-      } else if (documentState.version > 1) {
-        lastDidChange = {
-          uri: documentState.uri,
-          version: documentState.version,
-          text: documentState.text,
-        };
-      }
-    }
-
+    isInitialized = true;
     return result;
   },
 
-  'textDocument/hover': async () => null,
+  'textDocument/hover': async () => {
+    return null;
+  },
 
-  // --- lsp debug (Phase 4 test only) ---
+  // --- debug ---
   'lsp/_debug/getLastDidOpen': async () => {
     return lastDidOpen;
   },
@@ -114,13 +125,17 @@ const handlers = {
   },
 };
 
+/* -------------------------
+ * JSON-RPC loop
+ * ------------------------- */
+
 self.onmessage = async (e) => {
   const msg = e.data;
   if (!msg || msg.jsonrpc !== '2.0') return;
 
   const { id, method, params } = msg;
-
   const handler = handlers[method];
+
   if (!handler) {
     if (id != null) {
       self.postMessage({
@@ -151,5 +166,6 @@ self.onmessage = async (e) => {
   }
 };
 
+// ready notification
 postLog('Worker loaded and ready.');
 self.postMessage({ jsonrpc: '2.0', method: 'worker/ready' });
