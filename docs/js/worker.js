@@ -10,6 +10,8 @@ import { postLog, setDebug } from './util/logger.js';
 setDebug(true);
 
 let lastDidOpen = null;
+let lastOpenedFile = null;
+
 const handlers = {
   // --- lifecycle ---
   'worker/ready': async () => ({ ok: true }),
@@ -33,14 +35,17 @@ const handlers = {
     if (!params || typeof params.uri !== 'string' || params.uri.length === 0 || typeof params.content !== 'string') {
       throw Object.assign(new Error('Invalid params'), { code: -32602 });
     }
-
     // 2 VFS ready check
     if (!VfsCore.getEnvInfo().ready) {
       throw Object.assign(new Error('VFS is not ready'), { code: -32001 });
     }
 
-    // ここから先は仮実装でよい
-    // 中身はまだ何もしない
+    // Phase 4 前半: openFile 内容を保持
+    lastOpenedFile = {
+      uri: params.uri,
+      content: params.content,
+    };
+
     return { ok: true };
   },
 
@@ -49,10 +54,13 @@ const handlers = {
     const result = await LspCore.initialize(params);
 
     // --- Phase 4 前半: didOpen 発行を「観測用に記録」 ---
-    lastDidOpen = {
-      uri: 'file:///test.ts', // 今は固定でよい(テスト前提)
-      version: 1,
-    };
+    if (lastOpenedFile) {
+      lastDidOpen = {
+        uri: lastOpenedFile.uri,
+        version: 1,
+        text: lastOpenedFile.content,
+      };
+    }
 
     return result;
   },
