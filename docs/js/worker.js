@@ -10,7 +10,13 @@ import { postLog, setDebug } from './util/logger.js';
 setDebug(true);
 
 let lastDidOpen = null;
-let lastOpenedFile = null;
+let lastDidChange = null;
+
+let documentState = {
+  uri: null,
+  version: 0,
+  text: null,
+};
 
 const handlers = {
   // --- lifecycle ---

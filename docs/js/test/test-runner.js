@@ -17,5 +17,6 @@ console.log('🚀 test-runner.js loaded');
 //import './v0.0.3/vfs-openFile-before-lsp-initialize.test.js';
 //import './v0.0.3/vfs-openFile-visible-to-lsp.test.js';
 //import './v0.0.3/vfs-openFile-visible-to-lsp-hover.test.js';
-import './v0.0.3/vfs-openFile-didOpen.test.js';
+//import './v0.0.3/vfs-openFile-didOpen.test.js';
+import './v0.0.3/vfs-openFile-didChange.test.js';
 
