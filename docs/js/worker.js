@@ -9,6 +9,7 @@ import { postLog, setDebug } from './util/logger.js';
 // Enable debug by default for test runner visibility
 setDebug(true);
 
+let lastDidOpen = null;
 const handlers = {
   // --- lifecycle ---
   'worker/ready': async () => ({ ok: true }),
@@ -45,10 +46,22 @@ const handlers = {
 
   // --- lsp ---
   'lsp/initialize': async (params) => {
-    return LspCore.initialize(params);
+    const result = await LspCore.initialize(params);
+
+    // --- Phase 4 前半: didOpen 発行を「観測用に記録」 ---
+    lastDidOpen = {
+      uri: 'file:///test.ts', // 今は固定でよい(テスト前提)
+      version: 1,
+    };
+
+    return result;
   },
   'textDocument/hover': async () => {
     return null;
+  },
+  // --- lsp debug ---
+  'lsp/_debug/getLastDidOpen': async () => {
+    return lastDidOpen;
   },
 };
 

@@ -2,14 +2,10 @@
 // v0.0.3.5
 //
 // 目的:
-// - vfs/openFile されたファイルが
-//   lsp/initialize 後に textDocument/didOpen として同期されること
-// - version = 1 が使用されることを最小観測する
-//
-// 非目的:
-// - snapshot 更新
-// - didChange / didClose
-// - diagnostics / completion の正しさ
+// - vfs/openFile → lsp/initialize の流れで
+//   textDocument/didOpen が「1回」発行されたことを観測する
+// - 内容の差分・再送・version 増分は扱わない
+// - 観測はテスト専用 debug API に限定する
 
 import { expect } from 'chai';
 import {
@@ -23,7 +19,7 @@ console.log('🧩 vfs-openFile-didOpen.test loaded');
 
 (async () => {
   const testName =
-    'phase4: vfs/openFile is synchronized via didOpen with version=1';
+    'phase4: vfs/openFile before lsp/initialize triggers didOpen on initialize';
   let worker;
 
   try {
@@ -34,7 +30,7 @@ console.log('🧩 vfs-openFile-didOpen.test loaded');
     const ready = await sendRequest(worker, 'vfs/ensureReady');
     expect(ready.ok).to.equal(true);
 
-    // --- openFile ---
+    // --- initialize 前に openFile ---
     const uri = 'file:///test.ts';
     const content = 'const x: number = 1;';
 
@@ -51,19 +47,16 @@ console.log('🧩 vfs-openFile-didOpen.test loaded');
     });
     expect(initResult).to.be.an('object');
 
-    /**
-     * 観測点（Phase 4 前半）:
-     *
-     * - didOpen が送信されていること
-     * - version = 1 が使われていること
-     *
-     * 実装依存だが、以下のいずれかで観測する想定:
-     * - LspCore 側で lastDidOpen を保持し、検査用 RPC で取得
-     * - hover / symbol 等が version=1 前提で動作する
-     *
-     * ※ 本雛形では assert をまだ置かない
-     * ※ Phase 4 後半で観測点を確定する
-     */
+    // --- didOpen 観測(テスト専用) ---
+    const didOpen = await sendRequest(
+      worker,
+      'lsp/_debug/getLastDidOpen'
+    );
+
+    expect(didOpen).to.be.an('object');
+    expect(didOpen.uri).to.equal(uri);
+    expect(didOpen.text).to.equal(content);
+    expect(didOpen.version).to.equal(1);
 
     addResult(testName, true);
   } catch (err) {
