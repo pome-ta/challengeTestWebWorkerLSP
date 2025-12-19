@@ -1,19 +1,19 @@
 // worker.js
-// v0.0.3.4
+// v0.0.3.5
 
 import { VfsCore } from './core/vfs-core.js';
 import { LspCore } from './core/lsp-core.js';
-import { JsonRpcErrorCode } from './core/error-codes.js';
 import { postLog, setDebug } from './util/logger.js';
 
 // Enable debug by default for test runner visibility
 setDebug(true);
 
+// --- Phase 4: 観測用状態 ---
 let lastDidOpen = null;
-let lastOpenedFile = null;
 let lastDidChange = null;
 
-let documentState = {
+// --- Phase 4: 単一ドキュメント状態 ---
+const documentState = {
   uri: null,
   version: 0,
   text: null,
@@ -32,26 +32,32 @@ const handlers = {
   'vfs/getEnvInfo': async () => {
     return VfsCore.getEnvInfo();
   },
+
   'vfs/resetForTest': async () => {
     VfsCore.resetForTest();
+    documentState.uri = null;
+    documentState.version = 0;
+    documentState.text = null;
+    lastDidOpen = null;
+    lastDidChange = null;
     return { ok: true };
   },
 
   'vfs/openFile': async (params) => {
-    // 1 params validation(最優先)
-    if (!params || typeof params.uri !== 'string' || params.uri.length === 0 || typeof params.content !== 'string') {
+    // params validation
+    if (
+      !params ||
+      typeof params.uri !== 'string' ||
+      params.uri.length === 0 ||
+      typeof params.content !== 'string'
+    ) {
       throw Object.assign(new Error('Invalid params'), { code: -32602 });
     }
-    // 2 VFS ready check
+
+    // VFS ready check
     if (!VfsCore.getEnvInfo().ready) {
       throw Object.assign(new Error('VFS is not ready'), { code: -32001 });
     }
-
-    // Phase 4 前半: openFile 内容を保持
-    lastOpenedFile = {
-      uri: params.uri,
-      content: params.content,
-    };
 
     if (documentState.uri === params.uri) {
       documentState.version += 1;
@@ -69,35 +75,36 @@ const handlers = {
   'lsp/initialize': async (params) => {
     const result = await LspCore.initialize(params);
 
-    // --- Phase 4 前半: didOpen 発行を「観測用に記録」 ---
-    if (lastOpenedFile) {
-      lastDidOpen = {
-        uri: lastOpenedFile.uri,
-        version: 1,
-        text: lastOpenedFile.content,
-      };
-    }
-
-    if (documentState.version === 1) {
-      lastDidOpen = {
-        uri: documentState.uri,
-        version: 1,
-        text: documentState.text,
-      };
-    } else if (documentState.version > 1) {
-      lastDidChange = {
-        uri: documentState.uri,
-        version: documentState.version,
-        text: documentState.text,
-      };
+    /*
+      Phase 4 仕様:
+      - initialize 時点で documentState を評価
+      - version === 1 → didOpen
+      - version > 1  → didChange
+      NOTE:
+      この挙動は Phase 5 で LSP 標準フローに置き換える
+    */
+    if (documentState.uri) {
+      if (documentState.version === 1) {
+        lastDidOpen = {
+          uri: documentState.uri,
+          version: 1,
+          text: documentState.text,
+        };
+      } else if (documentState.version > 1) {
+        lastDidChange = {
+          uri: documentState.uri,
+          version: documentState.version,
+          text: documentState.text,
+        };
+      }
     }
 
     return result;
   },
-  'textDocument/hover': async () => {
-    return null;
-  },
-  // --- lsp debug ---
+
+  'textDocument/hover': async () => null,
+
+  // --- lsp debug (Phase 4 test only) ---
   'lsp/_debug/getLastDidOpen': async () => {
     return lastDidOpen;
   },
@@ -109,12 +116,12 @@ const handlers = {
 
 self.onmessage = async (e) => {
   const msg = e.data;
-
   if (!msg || msg.jsonrpc !== '2.0') return;
 
   const { id, method, params } = msg;
 
-  if (!handlers[method]) {
+  const handler = handlers[method];
+  if (!handler) {
     if (id != null) {
       self.postMessage({
         jsonrpc: '2.0',
@@ -126,8 +133,7 @@ self.onmessage = async (e) => {
   }
 
   try {
-    const result = await handlers[method](params);
-
+    const result = await handler(params);
     if (id != null) {
       self.postMessage({ jsonrpc: '2.0', id, result });
     }
@@ -145,6 +151,5 @@ self.onmessage = async (e) => {
   }
 };
 
-// RPC 受付開始通知
 postLog('Worker loaded and ready.');
 self.postMessage({ jsonrpc: '2.0', method: 'worker/ready' });
