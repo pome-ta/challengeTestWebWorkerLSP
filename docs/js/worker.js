@@ -58,12 +58,7 @@ const handlers = {
 
   'vfs/openFile': async (params) => {
     // params validation
-    if (
-      !params ||
-      typeof params.uri !== 'string' ||
-      params.uri.length === 0 ||
-      typeof params.content !== 'string'
-    ) {
+    if (!params || typeof params.uri !== 'string' || params.uri.length === 0 || typeof params.content !== 'string') {
       throw Object.assign(new Error('Invalid params'), { code: -32602 });
     }
 
