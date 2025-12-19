@@ -47,6 +47,9 @@ const handlers = {
   'lsp/initialize': async (params) => {
     return LspCore.initialize(params);
   },
+  'textDocument/hover': async () => {
+    return null;
+  },
 };
 
 self.onmessage = async (e) => {
