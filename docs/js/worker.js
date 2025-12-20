@@ -1,5 +1,5 @@
 // worker.js
-// Phase 9 clean implementation (completion / hover concrete minimal)
+// v0.0.3.10 Phase 9 clean implementation (completion / hover concrete minimal)
 
 import { VfsCore } from './core/vfs-core.js';
 import { LspCore } from './core/lsp-core.js';
