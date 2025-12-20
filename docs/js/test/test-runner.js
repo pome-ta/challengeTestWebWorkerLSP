@@ -41,7 +41,10 @@ console.log('🚀 test-runner.js loaded');
 // import './v0.0.3/phase7-before-initialize.test.js';
 
 // v0.0.3.9
-import './v0.0.3/phase8-completion-hover.test.js';
+// import './v0.0.3/phase8-completion-hover.test.js';
 
+
+// v0.0.3.10
+import './v0.0.3/phase9-completion-hover.test.js';
 
 

@@ -1,5 +1,5 @@
 // worker.js
-// v0.0.3.9 Phase 8 clean implementation (completion / hover minimal)
+// Phase 9 clean implementation (completion / hover concrete minimal)
 
 import { VfsCore } from './core/vfs-core.js';
 import { LspCore } from './core/lsp-core.js';
@@ -9,13 +9,13 @@ setDebug(true);
 
 /**
  * ---- Internal document state ----
- * Phase 4〜7 で確立したモデルを維持
+ * Phase 4〜7 で確立したモデルを完全維持
  */
 const documents = new Map(); // uri -> { version, text }
 let initialized = false;
 
 /**
- * ---- Phase 8 debug observability ----
+ * ---- Phase 8/9 debug observability ----
  */
 let lastCompletion = null;
 let lastHover = null;
@@ -74,7 +74,7 @@ const handlers = {
   },
 
   /**
-   * ---- Phase 8: completion (minimal) ----
+   * ---- Phase 9: completion (concrete minimal) ----
    */
   'textDocument/completion': async (params) => {
     lastCompletion = params ?? null;
@@ -84,18 +84,27 @@ const handlers = {
     }
 
     const uri = params?.textDocument?.uri;
-    if (!uri || !documents.has(uri)) {
+    const doc = uri ? documents.get(uri) : null;
+    if (!doc) {
       return { isIncomplete: false, items: [] };
     }
 
+    // Phase 9 最小実体：常に 1 件返す
     return {
       isIncomplete: false,
-      items: [],
+      items: [
+        {
+          label: 'Phase9Completion',
+          kind: 6, // Variable
+          detail: 'Phase 9 minimal completion',
+          insertText: 'Phase9Completion',
+        },
+      ],
     };
   },
 
   /**
-   * ---- Phase 8: hover (minimal) ----
+   * ---- Phase 9: hover (concrete minimal) ----
    */
   'textDocument/hover': async (params) => {
     lastHover = params ?? null;
@@ -105,14 +114,16 @@ const handlers = {
     }
 
     const uri = params?.textDocument?.uri;
-    if (!uri || !documents.has(uri)) {
+    const doc = uri ? documents.get(uri) : null;
+    if (!doc) {
       return null;
     }
 
+    // Phase 9 最小実体：document 情報を返す
     return {
       contents: {
         kind: 'plaintext',
-        value: '',
+        value: `uri: ${doc.uri}\nversion: ${doc.version}`,
       },
     };
   },
