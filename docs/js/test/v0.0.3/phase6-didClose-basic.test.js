@@ -10,8 +10,7 @@ import {
 } from './test-utils.js';
 
 (async () => {
-  const testName =
-    'phase6: didClose emitted once after initialize';
+  const testName = 'phase6: didClose emitted once after initialize';
 
   let worker;
 
@@ -34,10 +33,7 @@ import {
 
     await sendRequest(worker, 'vfs/closeFile', { uri });
 
-    const didClose = await sendRequest(
-      worker,
-      'lsp/_debug/getLastDidClose'
-    );
+    const didClose = await sendRequest(worker, 'lsp/_debug/getLastDidClose');
 
     expect(didClose).to.be.an('object');
     expect(didClose.uri).to.equal(uri);

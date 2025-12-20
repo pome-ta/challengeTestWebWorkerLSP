@@ -10,8 +10,7 @@ import {
 } from './test-utils.js';
 
 (async () => {
-  const testName =
-    'phase6: reopen after close emits didOpen with version 1';
+  const testName = 'phase6: reopen after close emits didOpen with version 1';
 
   let worker;
 
@@ -39,10 +38,7 @@ import {
       content: 'v2',
     });
 
-    const didOpen = await sendRequest(
-      worker,
-      'lsp/_debug/getLastDidOpen'
-    );
+    const didOpen = await sendRequest(worker, 'lsp/_debug/getLastDidOpen');
 
     expect(didOpen.uri).to.equal(uri);
     expect(didOpen.version).to.equal(1);

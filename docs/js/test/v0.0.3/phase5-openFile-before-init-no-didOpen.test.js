@@ -12,8 +12,7 @@ import {
 console.log('🧩 phase5-openFile-before-init-no-didOpen.test loaded');
 
 (async () => {
-  const testName =
-    'phase5: openFile before initialize does not emit didOpen';
+  const testName = 'phase5: openFile before initialize does not emit didOpen';
   let worker;
 
   try {
@@ -27,10 +26,7 @@ console.log('🧩 phase5-openFile-before-init-no-didOpen.test loaded');
       content: 'const x = 1;',
     });
 
-    const didOpen = await sendRequest(
-      worker,
-      'lsp/_debug/getLastDidOpen'
-    );
+    const didOpen = await sendRequest(worker, 'lsp/_debug/getLastDidOpen');
 
     expect(didOpen).to.equal(null);
 

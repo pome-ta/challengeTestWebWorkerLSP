@@ -10,8 +10,7 @@ import {
 } from './test-utils.js';
 
 (async () => {
-  const testName =
-    'phase6: multi-file close does not affect other documents';
+  const testName = 'phase6: multi-file close does not affect other documents';
 
   let worker;
 
@@ -45,10 +44,7 @@ import {
       content: 'B2',
     });
 
-    const didChange = await sendRequest(
-      worker,
-      'lsp/_debug/getLastDidChange'
-    );
+    const didChange = await sendRequest(worker, 'lsp/_debug/getLastDidChange');
 
     expect(didChange.uri).to.equal(uriB);
     expect(didChange.version).to.equal(2);

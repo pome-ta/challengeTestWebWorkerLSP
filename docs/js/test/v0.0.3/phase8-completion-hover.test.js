@@ -39,11 +39,17 @@ console.log('🧩 phase8-completion-hover.test loaded');
     expect(openResult.ok).to.equal(true);
 
     // --- completion before initialize ---
-    const preInitCompletion = await sendRequest(worker, 'textDocument/completion', {
-      textDocument: { uri },
-      position: { line: 0, character: 5 },
-    });
-    expect(preInitCompletion).to.satisfy((v) => v === null || Array.isArray(v) || typeof v === 'object');
+    const preInitCompletion = await sendRequest(
+      worker,
+      'textDocument/completion',
+      {
+        textDocument: { uri },
+        position: { line: 0, character: 5 },
+      }
+    );
+    expect(preInitCompletion).to.satisfy(
+      (v) => v === null || Array.isArray(v) || typeof v === 'object'
+    );
 
     // --- hover before initialize ---
     const preInitHover = await sendRequest(worker, 'textDocument/hover', {

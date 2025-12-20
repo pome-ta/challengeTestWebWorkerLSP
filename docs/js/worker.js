@@ -56,11 +56,9 @@ function applyIncrementalChange(text, change) {
 
   const { start, end } = change.range;
 
-  const before =
-    lines[start.line].slice(0, start.character);
+  const before = lines[start.line].slice(0, start.character);
 
-  const after =
-    lines[end.line].slice(end.character);
+  const after = lines[end.line].slice(end.character);
 
   lines.splice(
     start.line,

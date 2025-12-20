@@ -38,10 +38,7 @@ console.log('🧩 phase5-openFile-after-init-didChange.test loaded');
       content: 'const x = 2;',
     });
 
-    const didChange = await sendRequest(
-      worker,
-      'lsp/_debug/getLastDidChange'
-    );
+    const didChange = await sendRequest(worker, 'lsp/_debug/getLastDidChange');
 
     expect(didChange).to.deep.equal({
       uri,

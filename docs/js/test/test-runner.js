@@ -34,13 +34,8 @@ console.log('🚀 test-runner.js loaded');
 // import './v0.0.3/phase6-reopen-resets-version.test.js';
 // import './v0.0.3/phase6-multifile-isolation.test.js';
 
-
-
 // v0.0.3.8
 import './v0.0.3/phase7-incremental-sync.test.js';
 import './v0.0.3/phase7-version-increment.test.js';
 import './v0.0.3/phase7-diagnostics.test.js';
 import './v0.0.3/phase7-before-initialize.test.js';
-
-
-

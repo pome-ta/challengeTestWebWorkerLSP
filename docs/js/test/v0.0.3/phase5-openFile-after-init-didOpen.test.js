@@ -12,8 +12,7 @@ import {
 console.log('🧩 phase5-openFile-after-init-didOpen.test loaded');
 
 (async () => {
-  const testName =
-    'phase5: openFile after initialize emits didOpen';
+  const testName = 'phase5: openFile after initialize emits didOpen';
   let worker;
 
   try {
@@ -31,10 +30,7 @@ console.log('🧩 phase5-openFile-after-init-didOpen.test loaded');
 
     await sendRequest(worker, 'vfs/openFile', { uri, content });
 
-    const didOpen = await sendRequest(
-      worker,
-      'lsp/_debug/getLastDidOpen'
-    );
+    const didOpen = await sendRequest(worker, 'lsp/_debug/getLastDidOpen');
 
     expect(didOpen).to.deep.equal({
       uri,

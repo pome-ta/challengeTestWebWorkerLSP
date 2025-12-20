@@ -42,10 +42,7 @@ console.log('🧩 phase7-incremental-sync.test loaded');
       ],
     });
 
-    const lastChange = await sendRequest(
-      worker,
-      'lsp/_debug/getLastDidChange'
-    );
+    const lastChange = await sendRequest(worker, 'lsp/_debug/getLastDidChange');
 
     expect(lastChange.text).to.equal('const x = 2;');
 

@@ -10,8 +10,7 @@ import {
 } from './test-utils.js';
 
 (async () => {
-  const testName =
-    'phase6: update after didClose does not emit didChange';
+  const testName = 'phase6: update after didClose does not emit didChange';
 
   let worker;
 
@@ -39,10 +38,7 @@ import {
       content: 'v2',
     });
 
-    const didChange = await sendRequest(
-      worker,
-      'lsp/_debug/getLastDidChange'
-    );
+    const didChange = await sendRequest(worker, 'lsp/_debug/getLastDidChange');
 
     expect(didChange).to.equal(null);
 
