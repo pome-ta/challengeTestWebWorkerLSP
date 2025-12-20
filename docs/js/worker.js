@@ -1,5 +1,5 @@
 // worker.js
-// v0.0.3.7 (Phase 6 clean)
+// v0.0.3.8  Phase 7 clean implementation (incremental sync minimal)
 
 import { VfsCore } from './core/vfs-core.js';
 import { LspCore } from './core/lsp-core.js';
@@ -7,154 +7,115 @@ import { postLog, setDebug } from './util/logger.js';
 
 setDebug(true);
 
-/*
- * documentStates:
- * {
- *   [uri]: {
- *     version: number,
- *     text: string,
- *     opened: boolean
- *   }
- * }
- */
-const documentStates = new Map();
+// ---- document state (uri -> { version, text, opened }) ----
+const documents = new Map();
 
-let initialized = false;
-
-// --- debug observation ---
-let lastDidOpen = null;
+// ---- debug observation ----
 let lastDidChange = null;
-let lastDidClose = null;
+let lastDiagnostics = null;
 
+// ---- helpers ----
+function applyIncrementalChange(text, change) {
+  if (!change.range) {
+    // fallback: full replace
+    return change.text;
+  }
+
+  const { start, end } = change.range;
+  const lines = text.split('\n');
+
+  const beforeLines = lines.slice(0, start.line);
+  const afterLines = lines.slice(end.line + 1);
+
+  const startLine = lines[start.line] ?? '';
+  const endLine = lines[end.line] ?? '';
+
+  const before = startLine.slice(0, start.character);
+  const after = endLine.slice(end.character);
+
+  const middle = change.text;
+
+  const merged = (before + middle + after).split('\n');
+
+  return [...beforeLines, ...merged, ...afterLines].join('\n');
+}
+
+// ---- handlers ----
 const handlers = {
-  // --- lifecycle ---
+  // lifecycle
   'worker/ready': async () => ({ ok: true }),
 
-  // --- vfs ---
+  // vfs
   'vfs/ensureReady': async () => {
     await VfsCore.ensureReady();
     return { ok: true };
   },
 
-  'vfs/resetForTest': async () => {
-    documentStates.clear();
-    lastDidOpen = null;
-    lastDidChange = null;
-    lastDidClose = null;
-    initialized = false;
-    return { ok: true };
-  },
-
-  'vfs/openFile': async ({ uri, content }) => {
-    if (typeof uri !== 'string' || typeof content !== 'string') {
-      throw Object.assign(new Error('Invalid params'), { code: -32602 });
-    }
-    if (!VfsCore.getEnvInfo().ready) {
-      throw Object.assign(new Error('VFS not ready'), { code: -32001 });
-    }
-
-    const prev = documentStates.get(uri);
-
-    // --- initialize 前: state のみ保持 ---
-    if (!initialized) {
-      documentStates.set(uri, {
-        version: prev ? prev.version + 1 : 1,
-        text: content,
-        opened: true,
-      });
-      return { ok: true };
-    }
-
-    // --- initialize 後 ---
-    if (!prev) {
-      // didOpen
-      documentStates.set(uri, {
-        version: 1,
-        text: content,
-        opened: true,
-      });
-
-      lastDidOpen = {
-        uri,
-        version: 1,
-        text: content,
-      };
-    } else if (prev.opened) {
-      // didChange
-      const nextVersion = prev.version + 1;
-      documentStates.set(uri, {
-        version: nextVersion,
-        text: content,
-        opened: true,
-      });
-
-      lastDidChange = {
-        uri,
-        version: nextVersion,
-        text: content,
-      };
-    } else {
-      // reopen after close → didOpen with version=1
-      documentStates.set(uri, {
-        version: 1,
-        text: content,
-        opened: true,
-      });
-
-      lastDidOpen = {
-        uri,
-        version: 1,
-        text: content,
-      };
-    }
-
-    return { ok: true };
-  },
-
-  'vfs/closeFile': async ({ uri }) => {
-    if (typeof uri !== 'string') {
-      throw Object.assign(new Error('Invalid params'), { code: -32602 });
-    }
-
-    const state = documentStates.get(uri);
-    if (!state || !state.opened) {
-      return { ok: true };
-    }
-
-    // initialize 前は state 破棄のみ
-    if (!initialized) {
-      documentStates.delete(uri);
-      return { ok: true };
-    }
-
-    // initialize 後: didClose
-    documentStates.delete(uri);
-
-    lastDidClose = { uri };
-
-    return { ok: true };
-  },
-
-  // --- lsp ---
+  // lsp
   'lsp/initialize': async (params) => {
-    const result = await LspCore.initialize(params);
-    initialized = true;
-    return result;
+    return LspCore.initialize(params);
   },
 
-  // --- debug ---
-  'lsp/_debug/getLastDidOpen': async () => lastDidOpen,
+  'textDocument/didOpen': async (params) => {
+    const { uri, text } = params.textDocument;
+
+    documents.set(uri, {
+      uri,
+      version: params.textDocument.version ?? 1,
+      text,
+      opened: true,
+    });
+
+    // diagnostics (Phase 7: always empty)
+    lastDiagnostics = { uri, diagnostics: [] };
+
+    return null;
+  },
+
+  'textDocument/didChange': async (params) => {
+    const { uri, version } = params.textDocument;
+    const doc = documents.get(uri);
+    if (!doc || !doc.opened) return;
+
+    let text = doc.text;
+    for (const change of params.contentChanges) {
+      text = applyIncrementalChange(text, change);
+    }
+
+    doc.text = text;
+    doc.version = version;
+
+    lastDidChange = {
+      uri,
+      version,
+      text,
+    };
+
+    lastDiagnostics = { uri, diagnostics: [] };
+
+    return;
+  },
+
+  'textDocument/didClose': async (params) => {
+    const { uri } = params.textDocument;
+    const doc = documents.get(uri);
+    if (doc) doc.opened = false;
+    return;
+  },
+
+  // ---- debug ----
   'lsp/_debug/getLastDidChange': async () => lastDidChange,
-  'lsp/_debug/getLastDidClose': async () => lastDidClose,
+  'lsp/_debug/getLastDiagnostics': async () => lastDiagnostics,
 };
 
+// ---- JSON-RPC loop ----
 self.onmessage = async (e) => {
   const msg = e.data;
   if (!msg || msg.jsonrpc !== '2.0') return;
 
   const { id, method, params } = msg;
-  const handler = handlers[method];
 
+  const handler = handlers[method];
   if (!handler) {
     if (id != null) {
       self.postMessage({
@@ -185,6 +146,5 @@ self.onmessage = async (e) => {
   }
 };
 
-// --- boot ---
 postLog('Worker loaded and ready.');
 self.postMessage({ jsonrpc: '2.0', method: 'worker/ready' });
