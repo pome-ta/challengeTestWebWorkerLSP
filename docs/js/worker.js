@@ -1,6 +1,7 @@
 // worker.js
-// v0.0.3.10 Phase 9 clean implementation (completion / hover concrete minimal)
+// v0.0.4.1 Phase 10 clean implementation (TS Language Service connected)
 
+import * as ts from 'typescript';
 import { VfsCore } from './core/vfs-core.js';
 import { LspCore } from './core/lsp-core.js';
 import { postLog, setDebug } from './util/logger.js';
@@ -8,18 +9,84 @@ import { postLog, setDebug } from './util/logger.js';
 setDebug(true);
 
 /**
- * ---- Internal document state ----
- * Phase 4〜7 で確立したモデルを完全維持
+ * ---- Internal document state (Phase 4〜9 維持) ----
  */
-const documents = new Map(); // uri -> { version, text }
+const documents = new Map(); // uri -> { uri, version, text }
 let initialized = false;
 
 /**
- * ---- Phase 8/9 debug observability ----
+ * ---- TS Language Service ----
  */
-let lastCompletion = null;
-let lastHover = null;
+let tsService = null;
 
+/**
+ * URI <-> TS fileName mapping
+ * Safari / browser 環境では file path は仮想でよい
+ */
+const uriToFileName = (uri) => uri.replace('file://', '');
+const fileNameToUri = (fileName) => `file://${fileName}`;
+
+/**
+ * ---- TS Language Service Host ----
+ */
+const tsHost = {
+  getScriptFileNames() {
+    return [...documents.keys()].map(uriToFileName);
+  },
+
+  getScriptVersion(fileName) {
+    const uri = fileNameToUri(fileName);
+    return String(documents.get(uri)?.version ?? 0);
+  },
+
+  getScriptSnapshot(fileName) {
+    const uri = fileNameToUri(fileName);
+    const doc = documents.get(uri);
+    if (!doc) return undefined;
+    return ts.ScriptSnapshot.fromString(doc.text);
+  },
+
+  getCurrentDirectory() {
+    return '/';
+  },
+
+  getCompilationSettings() {
+    return {
+      strict: true,
+      target: ts.ScriptTarget.ESNext,
+      module: ts.ModuleKind.ESNext,
+    };
+  },
+
+  getDefaultLibFileName(options) {
+    return ts.getDefaultLibFilePath(options);
+  },
+
+  fileExists(fileName) {
+    return documents.has(fileNameToUri(fileName));
+  },
+
+  readFile(fileName) {
+    const uri = fileNameToUri(fileName);
+    return documents.get(uri)?.text;
+  },
+};
+
+/**
+ * ---- Utilities ----
+ */
+const offsetAt = (text, position) => {
+  const lines = text.split('\n');
+  let offset = 0;
+  for (let i = 0; i < position.line; i++) {
+    offset += lines[i].length + 1;
+  }
+  return offset + position.character;
+};
+
+/**
+ * ---- RPC handlers ----
+ */
 const handlers = {
   // --- lifecycle ---
   'worker/ready': async () => ({ ok: true }),
@@ -27,17 +94,6 @@ const handlers = {
   // --- VFS ---
   'vfs/ensureReady': async () => {
     await VfsCore.ensureReady();
-    return { ok: true };
-  },
-
-  'vfs/getEnvInfo': async () => VfsCore.getEnvInfo(),
-
-  'vfs/resetForTest': async () => {
-    VfsCore.resetForTest();
-    documents.clear();
-    initialized = false;
-    lastCompletion = null;
-    lastHover = null;
     return { ok: true };
   },
 
@@ -69,17 +125,19 @@ const handlers = {
   // --- LSP ---
   'lsp/initialize': async (params) => {
     const result = await LspCore.initialize(params);
+
+    // Phase 10: TS Language Service 起動
+    tsService = ts.createLanguageService(tsHost);
     initialized = true;
+
     return result;
   },
 
   /**
-   * ---- Phase 9: completion (concrete minimal) ----
+   * ---- Phase 10: completion (TS LS) ----
    */
   'textDocument/completion': async (params) => {
-    lastCompletion = params ?? null;
-
-    if (!initialized) {
+    if (!initialized || !tsService) {
       return { isIncomplete: false, items: [] };
     }
 
@@ -89,27 +147,35 @@ const handlers = {
       return { isIncomplete: false, items: [] };
     }
 
-    // Phase 9 最小実体：常に 1 件返す
+    const fileName = uriToFileName(uri);
+    const offset = offsetAt(doc.text, params.position);
+
+    const entries = tsService.getCompletionsAtPosition(
+      fileName,
+      offset,
+      {},
+    );
+
+    if (!entries) {
+      return { isIncomplete: false, items: [] };
+    }
+
     return {
       isIncomplete: false,
-      items: [
-        {
-          label: 'Phase9Completion',
-          kind: 6, // Variable
-          detail: 'Phase 9 minimal completion',
-          insertText: 'Phase9Completion',
-        },
-      ],
+      items: entries.entries.map((e) => ({
+        label: e.name,
+        kind: 6, // Variable / Property
+        detail: e.kind,
+        insertText: e.name,
+      })),
     };
   },
 
   /**
-   * ---- Phase 9: hover (concrete minimal) ----
+   * ---- Phase 10: hover (TS LS) ----
    */
   'textDocument/hover': async (params) => {
-    lastHover = params ?? null;
-
-    if (!initialized) {
+    if (!initialized || !tsService) {
       return null;
     }
 
@@ -119,20 +185,28 @@ const handlers = {
       return null;
     }
 
-    // Phase 9 最小実体：document 情報を返す
+    const fileName = uriToFileName(uri);
+    const offset = offsetAt(doc.text, params.position);
+
+    const info = tsService.getQuickInfoAtPosition(fileName, offset);
+    if (!info) {
+      return null;
+    }
+
+    const display = ts.displayPartsToString(info.displayParts);
+
     return {
       contents: {
         kind: 'plaintext',
-        value: `uri: ${doc.uri}\nversion: ${doc.version}`,
+        value: display,
       },
     };
   },
-
-  // --- debug ---
-  'lsp/_debug/getLastCompletion': async () => lastCompletion,
-  'lsp/_debug/getLastHover': async () => lastHover,
 };
 
+/**
+ * ---- JSON-RPC loop (Phase 9 完全維持) ----
+ */
 self.onmessage = async (e) => {
   const msg = e.data;
   if (!msg || msg.jsonrpc !== '2.0') return;
@@ -173,3 +247,4 @@ self.onmessage = async (e) => {
 // RPC ready
 postLog('Worker loaded and ready.');
 self.postMessage({ jsonrpc: '2.0', method: 'worker/ready' });
+
