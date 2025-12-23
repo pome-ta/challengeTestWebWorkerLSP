@@ -1,7 +1,7 @@
 // worker.js
 // v0.0.4.1 Phase 10 clean implementation (TS Language Service connected)
 
-import * as ts from 'typescript';
+import * as ts from 'https://esm.sh/typescript';
 import { VfsCore } from './core/vfs-core.js';
 import { LspCore } from './core/lsp-core.js';
 import { postLog, setDebug } from './util/logger.js';
