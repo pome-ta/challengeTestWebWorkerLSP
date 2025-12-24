@@ -19,13 +19,7 @@ let initialized = false;
 function createProgramForDoc(uri, text) {
   const fileName = uri.replace('file://', '');
 
-  const sourceFile = ts.createSourceFile(
-    fileName,
-    text,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS
-  );
+  const sourceFile = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
 
   const host = {
     getSourceFile: (name) => (name === fileName ? sourceFile : undefined),
@@ -41,6 +35,20 @@ function createProgramForDoc(uri, text) {
   };
 
   return ts.createProgram([fileName], {}, host);
+}
+
+
+/* ---------- position utils ---------- */
+
+function positionToOffset(text, position) {
+  const lines = text.split('\n');
+  let offset = 0;
+
+  for (let i = 0; i < position.line; i++) {
+    offset += lines[i].length + 1; // +1 for '\n'
+  }
+
+  return offset + position.character;
 }
 
 /* ---------- handlers ---------- */
@@ -94,10 +102,7 @@ const handlers = {
     const checker = program.getTypeChecker();
 
     const sourceFile = program.getSourceFiles()[0];
-    const symbols = checker.getSymbolsInScope(
-      sourceFile,
-      ts.SymbolFlags.Value
-    );
+    const symbols = checker.getSymbolsInScope(sourceFile, ts.SymbolFlags.Value);
 
     return {
       isIncomplete: false,
@@ -114,23 +119,28 @@ const handlers = {
     if (!initialized) return null;
 
     const uri = params?.textDocument?.uri;
+    const position = params?.position;
     const doc = uri ? documents.get(uri) : null;
-    if (!doc) return null;
+    if (!doc || !position) return null;
 
     const program = createProgramForDoc(uri, doc.text);
     const checker = program.getTypeChecker();
     const sourceFile = program.getSourceFiles()[0];
 
-    let found = null;
+    const offset = positionToOffset(doc.text, position);
+
+    let foundType = null;
 
     function visit(node) {
-      if (found) return;
-      if (ts.isIdentifier(node)) {
+      if (foundType) return;
+
+      if (ts.isIdentifier(node) && node.pos <= offset && offset <= node.end) {
         const symbol = checker.getSymbolAtLocation(node);
         if (symbol) {
           const type = checker.getTypeOfSymbolAtLocation(symbol, node);
-          found = checker.typeToString(type);
+          foundType = checker.typeToString(type);
         }
+        return;
       }
       ts.forEachChild(node, visit);
     }
@@ -140,12 +150,11 @@ const handlers = {
     return {
       contents: {
         kind: 'plaintext',
-        value: found ?? 'unknown',
+        value: foundType ?? 'unknown',
       },
     };
   },
 };
-
 /* ---------- RPC loop ---------- */
 
 self.onmessage = async (e) => {
