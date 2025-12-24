@@ -1,5 +1,6 @@
 // worker.js
-// v0.0.4.1 Phase 10 clean implementation (TS Language Service connected)
+// v0.0.4.1 Phase 10 clean implementation
+// TS Compiler API based (browser-only)
 
 import * as ts from 'https://esm.sh/typescript';
 import { VfsCore } from './core/vfs-core.js';
@@ -8,136 +9,78 @@ import { postLog, setDebug } from './util/logger.js';
 
 setDebug(true);
 
-/**
- * ---- Internal document state (Phase 4〜9 維持) ----
- */
-const documents = new Map(); // uri -> { uri, version, text }
+/* ---------- document state ---------- */
+
+const documents = new Map(); // uri -> { version, text }
 let initialized = false;
 
-/**
- * ---- TS Language Service ----
- */
-let tsService = null;
+/* ---------- TS Program helper ---------- */
 
-/**
- * URI <-> TS fileName mapping
- * Safari / browser 環境では file path は仮想でよい
- */
-const uriToFileName = (uri) => uri.replace('file://', '');
-const fileNameToUri = (fileName) => `file://${fileName}`;
+function createProgramForDoc(uri, text) {
+  const fileName = uri.replace('file://', '');
 
-/**
- * ---- TS Language Service Host ----
- */
-const tsHost = {
-  getScriptFileNames() {
-    return [...documents.keys()].map(uriToFileName);
-  },
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS
+  );
 
-  getScriptVersion(fileName) {
-    const uri = fileNameToUri(fileName);
-    return String(documents.get(uri)?.version ?? 0);
-  },
+  const host = {
+    getSourceFile: (name) => (name === fileName ? sourceFile : undefined),
+    getDefaultLibFileName: () => 'lib.d.ts',
+    writeFile: () => {},
+    getCurrentDirectory: () => '',
+    getDirectories: () => [],
+    fileExists: (name) => name === fileName,
+    readFile: () => undefined,
+    getCanonicalFileName: (f) => f,
+    useCaseSensitiveFileNames: () => true,
+    getNewLine: () => '\n',
+  };
 
-  getScriptSnapshot(fileName) {
-    const uri = fileNameToUri(fileName);
-    const doc = documents.get(uri);
-    if (!doc) return undefined;
-    return ts.ScriptSnapshot.fromString(doc.text);
-  },
+  return ts.createProgram([fileName], {}, host);
+}
 
-  getCurrentDirectory() {
-    return '/';
-  },
+/* ---------- handlers ---------- */
 
-  getCompilationSettings() {
-    return {
-      strict: true,
-      target: ts.ScriptTarget.ESNext,
-      module: ts.ModuleKind.ESNext,
-    };
-  },
-
-  getDefaultLibFileName(options) {
-    return ts.getDefaultLibFilePath(options);
-  },
-
-  fileExists(fileName) {
-    return documents.has(fileNameToUri(fileName));
-  },
-
-  readFile(fileName) {
-    const uri = fileNameToUri(fileName);
-    return documents.get(uri)?.text;
-  },
-};
-
-/**
- * ---- Utilities ----
- */
-const offsetAt = (text, position) => {
-  const lines = text.split('\n');
-  let offset = 0;
-  for (let i = 0; i < position.line; i++) {
-    offset += lines[i].length + 1;
-  }
-  return offset + position.character;
-};
-
-/**
- * ---- RPC handlers ----
- */
 const handlers = {
-  // --- lifecycle ---
+  /* --- lifecycle --- */
+
   'worker/ready': async () => ({ ok: true }),
 
-  // --- VFS ---
+  /* --- VFS --- */
+
   'vfs/ensureReady': async () => {
     await VfsCore.ensureReady();
     return { ok: true };
   },
 
-  'vfs/openFile': async (params) => {
-    if (
-      !params ||
-      typeof params.uri !== 'string' ||
-      typeof params.content !== 'string'
-    ) {
-      throw Object.assign(new Error('Invalid params'), { code: -32602 });
-    }
-
+  'vfs/openFile': async ({ uri, content }) => {
     if (!VfsCore.getEnvInfo().ready) {
       throw Object.assign(new Error('VFS is not ready'), { code: -32001 });
     }
 
-    const prev = documents.get(params.uri);
+    const prev = documents.get(uri);
     const version = prev ? prev.version + 1 : 1;
 
-    documents.set(params.uri, {
-      uri: params.uri,
-      version,
-      text: params.content,
-    });
-
+    documents.set(uri, { uri, text: content, version });
     return { ok: true };
   },
 
-  // --- LSP ---
+  /* --- LSP --- */
+
   'lsp/initialize': async (params) => {
     const result = await LspCore.initialize(params);
-
-    // Phase 10: TS Language Service 起動
-    tsService = ts.createLanguageService(tsHost);
     initialized = true;
-
     return result;
   },
 
-  /**
-   * ---- Phase 10: completion (TS LS) ----
-   */
+  /* --- completion --- */
+
   'textDocument/completion': async (params) => {
-    if (!initialized || !tsService) {
+    if (!initialized) {
       return { isIncomplete: false, items: [] };
     }
 
@@ -147,66 +90,64 @@ const handlers = {
       return { isIncomplete: false, items: [] };
     }
 
-    const fileName = uriToFileName(uri);
-    const offset = offsetAt(doc.text, params.position);
+    const program = createProgramForDoc(uri, doc.text);
+    const checker = program.getTypeChecker();
 
-    const entries = tsService.getCompletionsAtPosition(
-      fileName,
-      offset,
-      {},
+    const sourceFile = program.getSourceFiles()[0];
+    const symbols = checker.getSymbolsInScope(
+      sourceFile,
+      ts.SymbolFlags.Value
     );
-
-    if (!entries) {
-      return { isIncomplete: false, items: [] };
-    }
 
     return {
       isIncomplete: false,
-      items: entries.entries.map((e) => ({
-        label: e.name,
-        kind: 6, // Variable / Property
-        detail: e.kind,
-        insertText: e.name,
+      items: symbols.slice(0, 20).map((s) => ({
+        label: s.getName(),
+        kind: 6,
       })),
     };
   },
 
-  /**
-   * ---- Phase 10: hover (TS LS) ----
-   */
+  /* --- hover --- */
+
   'textDocument/hover': async (params) => {
-    if (!initialized || !tsService) {
-      return null;
-    }
+    if (!initialized) return null;
 
     const uri = params?.textDocument?.uri;
     const doc = uri ? documents.get(uri) : null;
-    if (!doc) {
-      return null;
+    if (!doc) return null;
+
+    const program = createProgramForDoc(uri, doc.text);
+    const checker = program.getTypeChecker();
+    const sourceFile = program.getSourceFiles()[0];
+
+    let found = null;
+
+    function visit(node) {
+      if (found) return;
+      if (ts.isIdentifier(node)) {
+        const symbol = checker.getSymbolAtLocation(node);
+        if (symbol) {
+          const type = checker.getTypeOfSymbolAtLocation(symbol, node);
+          found = checker.typeToString(type);
+        }
+      }
+      ts.forEachChild(node, visit);
     }
 
-    const fileName = uriToFileName(uri);
-    const offset = offsetAt(doc.text, params.position);
-
-    const info = tsService.getQuickInfoAtPosition(fileName, offset);
-    if (!info) {
-      return null;
-    }
-
-    const display = ts.displayPartsToString(info.displayParts);
+    visit(sourceFile);
 
     return {
       contents: {
         kind: 'plaintext',
-        value: display,
+        value: found ?? 'unknown',
       },
     };
   },
 };
 
-/**
- * ---- JSON-RPC loop (Phase 9 完全維持) ----
- */
+/* ---------- RPC loop ---------- */
+
 self.onmessage = async (e) => {
   const msg = e.data;
   if (!msg || msg.jsonrpc !== '2.0') return;
@@ -244,7 +185,7 @@ self.onmessage = async (e) => {
   }
 };
 
-// RPC ready
+/* ---------- ready ---------- */
+
 postLog('Worker loaded and ready.');
 self.postMessage({ jsonrpc: '2.0', method: 'worker/ready' });
-
