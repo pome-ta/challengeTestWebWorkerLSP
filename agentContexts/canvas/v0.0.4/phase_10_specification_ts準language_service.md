@@ -145,3 +145,87 @@ Phase 10 は、
 
 ことを証明するフェーズである。
 
+
+---
+
+# Phase 9 仕様（確定版）
+
+## 目的
+Completion / Hover が **具体的コンテンツを返す**ことを確認し、LSP レベルでの結果生成が安定している状態を仕様として固定する。
+
+## スコープ
+- 対象機能
+  - Completion Items の提示
+  - Hover 情報の提示
+- 情報源
+  - 既存の LSP もしくは仮実装の静的データ
+
+## 達成条件（Acceptance Criteria）
+1. Completion 要求に対し、空配列ではない候補リストを返す
+2. Hover 要求に対し、空文字列ではない `contents` を返す
+3. 返却値は **人間が読める具体的テキスト** を含む
+4. 型情報の有無は問わない（Phase 10 の対象とする）
+5. Phase 9 の成功は Phase 10 の実装有無に依存しない
+
+## 非スコープ（Out of Scope）
+- TypeScript Compiler API による型解決
+- TypeChecker に基づく hover contents 拡張
+- エディタ統合の UI 表示品質
+
+## 成功判定の観点
+- Completion 結果は取得できる
+- Hover 結果は取得できる
+- いずれも「取得できない」「例外」「空」の状態ではない
+
+---
+
+# Phase 10 仕様（TS Compiler API ベース Hover/Completion）
+
+## 目的
+Hover および Completion の情報源として **TypeScript Compiler API（Program / TypeChecker）を利用**し、型情報を含む結果を返すこと。
+
+## 要件
+### 機能要件
+1. Hover 情報に **型情報（例: `number`, `string`, 関数シグネチャ等）** が含まれる
+2. 情報源は TypeScript Compiler API の `TypeChecker` に基づく
+3. Completion および Hover のいずれか、または両方に型情報が反映される
+
+### 技術要件
+- `ts.createProgram` または LanguageService を通じて Program を構築
+- `Program.getTypeChecker()` により TypeChecker を取得
+- `checker.getTypeAtLocation(node)` または相当 API を利用
+- Virtual File System（VFS）と Program の同期が取れている
+
+### 最低限の成功条件
+- Hover 結果内に **型を示す文字列が含まれる**
+  - 例: `: number`, `: string`, `(): void` 等
+
+## 成功判定（テスト観点）
+- Phase 9 のテストはすべて継続して成功
+- Phase 10 の追加テストにて以下が成立
+  - Hover 文字列に型情報を含む
+  - `hover does not include type info` が発生しない
+
+## 実装に関する制約
+- 既存設計（LspServerCore / LSPWorker 構成）を保持
+- 可能な限り LSP の既存メカニズムを活用
+- 不要なカスタム実装は追加しない
+
+## 非スコープ
+- 型エラーメッセージの詳細化
+- 全 TS 機能の網羅的型解決
+- パフォーマンス最適化
+
+## ログ/デバッグ要件
+- Program 生成有無
+- SourceFile 数
+- Checker 利用の成否
+
+## 失敗時の既知症状（想定）
+- hover 文字列に型情報が含まれない
+- Program が再生成されていない
+- VFS と Program の不整合
+
+---
+
+この仕様に基づき、次工程として **worker 実装（Phase 10 対応）** を行う。

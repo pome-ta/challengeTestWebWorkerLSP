@@ -20,16 +20,21 @@ let initialized = false;
 /*  TS global state                                                            */
 /* -------------------------------------------------------------------------- */
 
+/* ---------- TS global state ---------- */
+
 let program = null;
 let checker = null;
 
 /**
- * Recreate Program and TypeChecker from current VFS + documents
+ * Program 再構築
+ * 変更点:
+ *  - VfsCore.readFile() を完全排除
+ *  - lib は LspCore または VfsCore 側に依存しない
+ *  - documents のみで Program 構築
  */
 function rebuildProgram() {
   const fileNames = [];
 
-  // documents are also part of VFS world
   for (const [uri] of documents) {
     const fileName = uri.replace('file://', '');
     fileNames.push(fileName);
@@ -37,7 +42,7 @@ function rebuildProgram() {
 
   const host = {
     getSourceFile: (fileName, languageVersion) => {
-      // 1) document map
+      // documents のみを対象にする
       for (const [uri, doc] of documents) {
         const name = uri.replace('file://', '');
         if (name === fileName) {
@@ -51,43 +56,34 @@ function rebuildProgram() {
         }
       }
 
-      // 2) VFS (lib files 含む)
-      const text = VfsCore.readFile(`/` + fileName);
-      if (text != null) {
-        return ts.createSourceFile(
-          fileName,
-          text,
-          languageVersion,
-          true,
-          ts.ScriptKind.TS
-        );
-      }
-
+      // ★ lib.d.ts グループは
+      //   TS Compiler API 内蔵の getDefaultLibFileName にまかせる
       return undefined;
     },
 
-    getDefaultLibFileName: () => 'lib.es2021.full.d.ts',
+    // TS が内部組み込み lib を利用する
+    getDefaultLibFileName: () => 'lib.d.ts',
 
     writeFile: () => {},
     getCurrentDirectory: () => '/',
     getDirectories: () => [],
+
     fileExists: (fileName) => {
-      // doc
       for (const [uri] of documents) {
         const name = uri.replace('file://', '');
         if (name === fileName) return true;
       }
-      // vfs
-      return VfsCore.fileExists(`/` + fileName);
+      return false;
     },
+
     readFile: (fileName) => {
       for (const [uri, doc] of documents) {
         const name = uri.replace('file://', '');
         if (name === fileName) return doc.text;
       }
-      const txt = VfsCore.readFile(`/` + fileName);
-      return txt == null ? undefined : txt;
+      return undefined;
     },
+
     getCanonicalFileName: (f) => f,
     useCaseSensitiveFileNames: () => true,
     getNewLine: () => '\n',
