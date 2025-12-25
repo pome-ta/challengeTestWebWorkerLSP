@@ -1,6 +1,6 @@
 // worker.js
-// v0.0.4.1 Phase 10 clean implementation
-// TS Compiler API based (browser-only)
+// v0.0.4.x Phase 10 clean implementation
+// TS Compiler API based, browser-only, no Node assumptions
 
 import * as ts from 'https://esm.sh/typescript';
 import { VfsCore } from './core/vfs-core.js';
@@ -9,55 +9,117 @@ import { postLog, setDebug } from './util/logger.js';
 
 setDebug(true);
 
-/* ---------- document state ---------- */
+/* -------------------------------------------------------------------------- */
+/*  Document state                                                            */
+/* -------------------------------------------------------------------------- */
 
 const documents = new Map(); // uri -> { version, text }
 let initialized = false;
 
-/* ---------- TS Program helper ---------- */
+/* -------------------------------------------------------------------------- */
+/*  TS global state                                                            */
+/* -------------------------------------------------------------------------- */
 
-function createProgramForDoc(uri, text) {
-  const fileName = uri.replace('file://', '');
+let program = null;
+let checker = null;
 
-  const sourceFile = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+/**
+ * Recreate Program and TypeChecker from current VFS + documents
+ */
+function rebuildProgram() {
+  const fileNames = [];
+
+  // documents are also part of VFS world
+  for (const [uri] of documents) {
+    const fileName = uri.replace('file://', '');
+    fileNames.push(fileName);
+  }
 
   const host = {
-    getSourceFile: (name) => (name === fileName ? sourceFile : undefined),
-    getDefaultLibFileName: () => 'lib.d.ts',
+    getSourceFile: (fileName, languageVersion) => {
+      // 1) document map
+      for (const [uri, doc] of documents) {
+        const name = uri.replace('file://', '');
+        if (name === fileName) {
+          return ts.createSourceFile(
+            fileName,
+            doc.text,
+            languageVersion,
+            true,
+            ts.ScriptKind.TS
+          );
+        }
+      }
+
+      // 2) VFS (lib files 含む)
+      const text = VfsCore.readFile(`/` + fileName);
+      if (text != null) {
+        return ts.createSourceFile(
+          fileName,
+          text,
+          languageVersion,
+          true,
+          ts.ScriptKind.TS
+        );
+      }
+
+      return undefined;
+    },
+
+    getDefaultLibFileName: () => 'lib.es2021.full.d.ts',
+
     writeFile: () => {},
-    getCurrentDirectory: () => '',
+    getCurrentDirectory: () => '/',
     getDirectories: () => [],
-    fileExists: (name) => name === fileName,
-    readFile: () => undefined,
+    fileExists: (fileName) => {
+      // doc
+      for (const [uri] of documents) {
+        const name = uri.replace('file://', '');
+        if (name === fileName) return true;
+      }
+      // vfs
+      return VfsCore.fileExists(`/` + fileName);
+    },
+    readFile: (fileName) => {
+      for (const [uri, doc] of documents) {
+        const name = uri.replace('file://', '');
+        if (name === fileName) return doc.text;
+      }
+      const txt = VfsCore.readFile(`/` + fileName);
+      return txt == null ? undefined : txt;
+    },
     getCanonicalFileName: (f) => f,
     useCaseSensitiveFileNames: () => true,
     getNewLine: () => '\n',
   };
 
-  return ts.createProgram([fileName], {}, host);
+  program = ts.createProgram(fileNames, {}, host);
+  checker = program.getTypeChecker();
 }
 
-/* ---------- position utils ---------- */
+/* -------------------------------------------------------------------------- */
+/*  util: LSP position → offset                                               */
+/* -------------------------------------------------------------------------- */
 
 function positionToOffset(text, position) {
   const lines = text.split('\n');
   let offset = 0;
-
   for (let i = 0; i < position.line; i++) {
-    offset += lines[i].length + 1; // +1 for '\n'
+    offset += lines[i].length + 1;
   }
-
   return offset + position.character;
 }
 
-/* ---------- handlers ---------- */
+/* -------------------------------------------------------------------------- */
+/*  Handlers                                                                  */
+/* -------------------------------------------------------------------------- */
 
 const handlers = {
-  /* --- lifecycle --- */
+  /* lifecycle */
 
   'worker/ready': async () => ({ ok: true }),
 
-  /* --- VFS --- */
+  /* VFS boot */
 
   'vfs/ensureReady': async () => {
     await VfsCore.ensureReady();
@@ -73,95 +135,107 @@ const handlers = {
     const version = prev ? prev.version + 1 : 1;
 
     documents.set(uri, { uri, text: content, version });
+
+    // program is now stale → rebuild
+    rebuildProgram();
+
     return { ok: true };
   },
 
-  /* --- LSP --- */
+  /* LSP initialize (Phase 10 = TS world boot) */
 
   'lsp/initialize': async (params) => {
+    await VfsCore.ensureReady();
+
     const result = await LspCore.initialize(params);
     initialized = true;
+
+    rebuildProgram();
+
     return result;
   },
 
-  /* --- completion --- */
+  /* completion */
 
   'textDocument/completion': async (params) => {
-    if (!initialized) {
+    if (!initialized || !program || !checker) {
       return { isIncomplete: false, items: [] };
     }
 
     const uri = params?.textDocument?.uri;
-    const doc = uri ? documents.get(uri) : null;
-    if (!doc) {
-      return { isIncomplete: false, items: [] };
-    }
+    const doc = documents.get(uri);
+    if (!doc) return { isIncomplete: false, items: [] };
 
-    const program = createProgramForDoc(uri, doc.text);
-    const checker = program.getTypeChecker();
+    const fileName = uri.replace('file://', '');
+    const sourceFile = program.getSourceFile(fileName);
+    if (!sourceFile) return { isIncomplete: false, items: [] };
 
-    const sourceFile = program.getSourceFiles()[0];
+    const offset = positionToOffset(doc.text, params.position);
+
+    // tokens and node at position
+    let token = ts.getTokenAtPosition(sourceFile, offset);
+    if (!token && offset > 0) token = ts.getTokenAtPosition(sourceFile, offset - 1);
+    if (!token) token = ts.findPrecedingToken(offset, sourceFile);
+
+    // scope symbols
     const symbols = checker.getSymbolsInScope(sourceFile, ts.SymbolFlags.Value);
 
     return {
       isIncomplete: false,
-      items: symbols.slice(0, 20).map((s) => ({
+      items: symbols.slice(0, 50).map((s) => ({
         label: s.getName(),
         kind: 6,
       })),
     };
   },
 
-  /* --- hover --- */
+  /* hover */
 
   'textDocument/hover': async (params) => {
-    if (!initialized) return null;
+    if (!initialized || !program || !checker) return null;
 
     const uri = params?.textDocument?.uri;
-    const position = params?.position;
-    const doc = uri ? documents.get(uri) : null;
-    if (!doc || !position) return null;
+    const doc = documents.get(uri);
+    if (!doc) return null;
 
-    const program = createProgramForDoc(uri, doc.text);
-    const checker = program.getTypeChecker();
-    const sourceFile = program.getSourceFiles()[0];
+    const fileName = uri.replace('file://', '');
+    const sourceFile = program.getSourceFile(fileName);
+    if (!sourceFile) return null;
 
-    const offset = positionToOffset(doc.text, position);
+    const offset = positionToOffset(doc.text, params.position);
 
-    // 変更点1: TS 純正 API で単一トークンを取得する
-    // --- robust token resolution around boundary positions ---
-
-    // 1) exact position
     let token = ts.getTokenAtPosition(sourceFile, offset);
+    if (!token && offset > 0) token = ts.getTokenAtPosition(sourceFile, offset - 1);
+    if (!token) token = ts.findPrecedingToken(offset, sourceFile);
 
-    // 2) if boundary or whitespace, retry offset-1
-    if (!token && offset > 0) {
-      token = ts.getTokenAtPosition(sourceFile, offset - 1);
-    }
-
-    // 3) fallback: preceding token search
     if (!token) {
-      token = ts.findPrecedingToken(offset, sourceFile);
+      return {
+        contents: { kind: 'plaintext', value: 'unknown' },
+      };
     }
 
-    let value = 'unknown';
-
-    if (token) {
-      const symbol = checker.getSymbolAtLocation(token);
-      if (symbol) {
-        const type = checker.getTypeOfSymbolAtLocation(symbol, token);
-        value = checker.typeToString(type);
-      }
+    const symbol = checker.getSymbolAtLocation(token);
+    if (!symbol) {
+      return {
+        contents: { kind: 'plaintext', value: 'unknown' },
+      };
     }
+
+    const type = checker.getTypeOfSymbolAtLocation(symbol, token);
+    const text = checker.typeToString(type);
+
     return {
       contents: {
         kind: 'plaintext',
-        value,
+        value: text,
       },
     };
   },
 };
-/* ---------- RPC loop ---------- */
+
+/* -------------------------------------------------------------------------- */
+/*  JSON-RPC loop                                                             */
+/* -------------------------------------------------------------------------- */
 
 self.onmessage = async (e) => {
   const msg = e.data;
@@ -200,7 +274,10 @@ self.onmessage = async (e) => {
   }
 };
 
-/* ---------- ready ---------- */
+/* -------------------------------------------------------------------------- */
+/*  ready                                                                     */
+/* -------------------------------------------------------------------------- */
 
 postLog('Worker loaded and ready.');
 self.postMessage({ jsonrpc: '2.0', method: 'worker/ready' });
+
