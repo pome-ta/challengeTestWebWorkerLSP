@@ -37,7 +37,6 @@ function createProgramForDoc(uri, text) {
   return ts.createProgram([fileName], {}, host);
 }
 
-
 /* ---------- position utils ---------- */
 
 function positionToOffset(text, position) {
@@ -129,28 +128,35 @@ const handlers = {
 
     const offset = positionToOffset(doc.text, position);
 
-    let foundType = null;
+    // 変更点1: TS 純正 API で単一トークンを取得する
+    // --- robust token resolution around boundary positions ---
 
-    function visit(node) {
-      if (foundType) return;
+    // 1) exact position
+    let token = ts.getTokenAtPosition(sourceFile, offset);
 
-      if (ts.isIdentifier(node) && node.pos <= offset && offset <= node.end) {
-        const symbol = checker.getSymbolAtLocation(node);
-        if (symbol) {
-          const type = checker.getTypeOfSymbolAtLocation(symbol, node);
-          foundType = checker.typeToString(type);
-        }
-        return;
-      }
-      ts.forEachChild(node, visit);
+    // 2) if boundary or whitespace, retry offset-1
+    if (!token && offset > 0) {
+      token = ts.getTokenAtPosition(sourceFile, offset - 1);
     }
 
-    visit(sourceFile);
+    // 3) fallback: preceding token search
+    if (!token) {
+      token = ts.findPrecedingToken(offset, sourceFile);
+    }
 
+    let value = 'unknown';
+
+    if (token) {
+      const symbol = checker.getSymbolAtLocation(token);
+      if (symbol) {
+        const type = checker.getTypeOfSymbolAtLocation(symbol, token);
+        value = checker.typeToString(type);
+      }
+    }
     return {
       contents: {
         kind: 'plaintext',
-        value: foundType ?? 'unknown',
+        value,
       },
     };
   },
