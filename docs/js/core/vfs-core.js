@@ -1,33 +1,27 @@
 // core/vfs-core.js
-// v0.0.4.2 Phase 10: VFS closed-world + TS Language Service-lite
+// v0.0.3.4 → v0.0.3.5（dispose 追加）
 
 import {
   createDefaultMapFromCDN,
   createSystem,
   createVirtualTypeScriptEnvironment,
 } from 'https://esm.sh/@typescript/vfs';
-
 import ts from 'https://esm.sh/typescript';
 import { postLog } from '../util/logger.js';
 import { sleep } from '../util/async-utils.js';
 
 class VfsCoreClass {
-  #env = null;              // { languageService, program, ... }
-  #system = null;           // virtual System
-  #fsMap = null;            // Map<string,string>
+  #env = null;
+  #system = null;
+  #fsMap = null;
   #ready = false;
   #initializing = null;
   #envId = 0;
 
-  // ----------------------------------------
-  // internal utility
-  // ----------------------------------------
-  async #loadDefaultLibsWithRetry(retryCount = 3, perAttemptTimeoutMs = 7000) {
+  async #createDefaultMapWithRetry(retryCount = 3, perAttemptTimeoutMs = 5000) {
     let lastError = null;
-
     for (let attempt = 1; attempt <= retryCount; attempt++) {
       postLog(`VFS init attempt ${attempt}/${retryCount}`);
-
       try {
         const timeout = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('timeout')), perAttemptTimeoutMs)
@@ -38,44 +32,38 @@ class VfsCoreClass {
             {
               target: ts.ScriptTarget.ES2022,
               module: ts.ModuleKind.ESNext,
-              strict: true,
-              skipLibCheck: true,
-              noEmit: true,
             },
             ts.version,
             false,
             ts
           ),
-          timeout,
+          timeout
         ]);
 
         postLog(`defaultMap size: ${defaultMap.size}`);
         return defaultMap;
-      } catch (err) {
-        lastError = err;
-        const msg = String(err?.message ?? err);
+      } catch (error) {
+        lastError = error;
+        const msg = String(error?.message ?? error);
+
+        if (msg.includes('fetch') || msg.includes('NetworkError')) {
+          postLog(`Network error while fetching defaultMap: ${msg}`);
+          throw error;
+        }
 
         if (msg.includes('timeout')) {
-          postLog(`timeout, backoff retry...`);
-          await sleep(800 * attempt);
+          postLog(`Timeout on attempt ${attempt}, retrying after backoff`);
+          await sleep(1000 * attempt);
           continue;
         }
 
-        if (msg.includes('fetch') || msg.includes('NetworkError')) {
-          postLog(`network failure during lib fetch: ${msg}`);
-          throw err;
-        }
-
-        throw err;
+        postLog(`createDefaultMapWithRetries unknown error: ${msg}`);
+        throw error;
       }
     }
-
-    throw lastError || new Error('failed to init vfs after retries');
+    throw lastError || new Error('VFS init failed after retries');
   }
 
-  // ----------------------------------------
-  // initialization
-  // ----------------------------------------
   async ensureReady() {
     if (this.#ready) return;
 
@@ -89,13 +77,9 @@ class VfsCoreClass {
   async #init() {
     this.#envId++;
 
-    // 1) load stdlib files from CDN
-    this.#fsMap = await this.#loadDefaultLibsWithRetry();
-
-    // 2) create virtual System
+    this.#fsMap = await this.#createDefaultMapWithRetry();
     this.#system = createSystem(this.#fsMap);
 
-    // 3) create Virtual TypeScript Environment
     this.#env = createVirtualTypeScriptEnvironment(
       this.#system,
       [],
@@ -110,57 +94,34 @@ class VfsCoreClass {
     );
 
     this.#ready = true;
-
-    postLog(`VFS ready. envId=${this.#envId}`);
   }
 
-  // ----------------------------------------
-  // file operations
-  // ----------------------------------------
-  writeFile(uri, text) {
-    if (!this.#ready) {
-      throw new Error('VFS not ready');
-    }
-
-    this.#fsMap.set(uri, text);
-    this.#system.writeFile(uri, text);
-
-    // languageService side is incremental-aware
-    this.#env.updateFile(uri, text);
-  }
-
-  readFile(uri) {
-    if (!this.#ready) {
-      throw new Error('VFS not ready');
-    }
-    return this.#fsMap.get(uri) ?? null;
-  }
-
-  // ----------------------------------------
-  // language service access
-  // ----------------------------------------
-  getLanguageService() {
-    if (!this.#ready) {
-      throw new Error('VFS not ready');
-    }
-    return this.#env.languageService;
-  }
-
-  // ----------------------------------------
-  // observability / debug
-  // ----------------------------------------
   getEnvInfo() {
     return {
       ready: this.#ready,
-      envId: this.#envId,
+      hasEnv: this.#env !== null,
       tsVersion: ts.version,
-      fileCount: this.#fsMap?.size ?? 0,
+      envId: this.#envId,
     };
   }
 
-  // ----------------------------------------
-  // test support
-  // ----------------------------------------
+  readFile(uri) {
+    if (!this.#ready) return null;
+    return this.#env.sys.readFile(uri) ?? null;
+  }
+
+  writeFile(uri, text) {
+    if (!this.#ready) {
+      throw new Error('VFS not initialized');
+    }
+    this.#env.updateFile(uri, text);
+  }
+
+  getLanguageService() {
+    if (!this.#ready || !this.#env) return null;
+    return this.#env.languageService;
+  }
+
   resetForTest() {
     this.#env = null;
     this.#system = null;
@@ -168,6 +129,22 @@ class VfsCoreClass {
     this.#ready = false;
     this.#initializing = null;
     this.#envId = 0;
+  }
+
+  // ★★★ 追加箇所 ★★★
+  // 本番用ライフサイクル管理 API
+  // worker shutdown / project unload を想定
+  dispose() {
+    postLog('VFS dispose called');
+
+    // env の内部構造を GC 対象にする
+    this.#env = null;
+    this.#system = null;
+    this.#fsMap = null;
+
+    // future re-init 可能状態へ戻す
+    this.#ready = false;
+    this.#initializing = null;
   }
 }
 
