@@ -1,148 +1,109 @@
 // worker.js
-// v0.0.4.2 Phase 10 implementation
-// Browser TS Compiler API + Language Service
+// v0.0.4.2 Phase 10 完成版
+// VfsCore + TextDocumentManager + TS Compiler API Language Service
 
 import * as ts from 'https://esm.sh/typescript';
 import { VfsCore } from './core/vfs-core.js';
+import { TextDocumentManager } from './core/text-document-manager.js';
 import { LspCore } from './core/lsp-core.js';
 import { postLog, setDebug } from './util/logger.js';
 
 setDebug(true);
 
 /* --------------------------------------------------
- * document state
+ * 状態
  * -------------------------------------------------- */
 
-const documents = new Map(); // uri -> { version, text }
 let initialized = false;
 
 /* --------------------------------------------------
- * LSP position <-> offset
- * -------------------------------------------------- */
-
-function positionToOffset(text, position) {
-  const lines = text.split('\n');
-  let offset = 0;
-
-  for (let i = 0; i < position.line; i++) {
-    offset += lines[i].length + 1;
-  }
-  return offset + position.character;
-}
-
-/* --------------------------------------------------
- * TypeScript Language Service
+ * Language Service
  * -------------------------------------------------- */
 
 let languageService = null;
 
-function uriToFileName(uri) {
-  return uri.replace(/^file:\/\//, '');
-}
-
-/* --- LanguageServiceHost --- */
-const serviceHost = {
-  getScriptFileNames: () => {
-    return [...documents.keys()].map(uriToFileName);
-  },
-
-  getScriptVersion: (fileName) => {
-    for (const [uri, doc] of documents.entries()) {
-      if (uriToFileName(uri) === fileName) return String(doc.version);
-    }
-    return '0';
-  },
-
-  getScriptSnapshot: (fileName) => {
-    for (const [uri, doc] of documents.entries()) {
-      if (uriToFileName(uri) === fileName) {
-        return ts.ScriptSnapshot.fromString(doc.text);
-      }
-    }
-    return undefined;
-  },
-
-  getCurrentDirectory: () => '/',
-  getCompilationSettings: () => ({
-    strict: true,
-    target: ts.ScriptTarget.ESNext,
-    module: ts.ModuleKind.ESNext,
-  }),
-  getDefaultLibFileName: (options) =>
-    ts.getDefaultLibFilePath(options),
-  fileExists: () => true,
-  readFile: () => '',
-  readDirectory: () => [],
-};
-
-/* --- create service once --- */
+/**
+ * VfsCore 上に TS Language Service を構築
+ */
 function ensureLanguageService() {
-  if (!languageService) {
-    languageService = ts.createLanguageService(
-      serviceHost,
-      ts.createDocumentRegistry()
-    );
-  }
+  if (languageService) return languageService;
+
+  const env = VfsCore.getLanguageService(); // ← ここが Phase10 の本質
+  languageService = env; // そのまま公開
+
   return languageService;
 }
 
 /* --------------------------------------------------
- * handlers
+ * handler implementations
  * -------------------------------------------------- */
 
 const handlers = {
-  /* lifecycle */
+  /* ---------- lifecycle ---------- */
 
   'worker/ready': async () => ({ ok: true }),
 
-  /* VFS */
+  /* ---------- VFS ---------- */
 
   'vfs/ensureReady': async () => {
     await VfsCore.ensureReady();
     return { ok: true };
   },
 
+  /* ---------- document lifecycle ---------- */
+
+  // 変更点: TextDocumentManager に委譲
   'vfs/openFile': async ({ uri, content }) => {
-    if (!VfsCore.getEnvInfo().ready) {
-      throw Object.assign(new Error('VFS is not ready'), { code: -32001 });
-    }
+    await VfsCore.ensureReady();
 
-    const prev = documents.get(uri);
-    const version = prev ? prev.version + 1 : 1;
+    TextDocumentManager.open(uri, content);
 
-    documents.set(uri, { uri, text: content, version });
+    // VFS に反映
+    VfsCore.writeFile(uri, content);
 
-    // Language Service は documents を見るだけなのでこれで十分
+    // LS 準備
     ensureLanguageService();
 
     return { ok: true };
   },
 
-  /* LSP initialize */
+  'textDocument/didChange': async ({ uri, content }) => {
+    TextDocumentManager.update(uri, content);
+    VfsCore.writeFile(uri, content);
+    return { ok: true };
+  },
+
+  'textDocument/didClose': async ({ uri }) => {
+    TextDocumentManager.close(uri);
+    return { ok: true };
+  },
+
+  /* ---------- LSP initialize ---------- */
 
   'lsp/initialize': async (params) => {
+    await VfsCore.ensureReady();
+
     const result = await LspCore.initialize(params);
-    initialized = true;
 
     ensureLanguageService();
+    initialized = true;
+
     return result;
   },
 
-  /* completion */
+  /* ---------- completion ---------- */
 
-  'textDocument/completion': async (params) => {
-    if (!initialized) {
-      return { isIncomplete: false, items: [] };
-    }
+  // 変更点: DocumentManager + VfsCore + Compiler API の統合
+  'textDocument/completion': async ({ textDocument, position }) => {
+    if (!initialized) return { isIncomplete: false, items: [] };
 
-    const uri = params?.textDocument?.uri;
-    const position = params?.position;
-
-    const doc = uri ? documents.get(uri) : null;
+    const uri = textDocument?.uri;
+    const doc = TextDocumentManager.get(uri);
     if (!doc) return { isIncomplete: false, items: [] };
 
-    const fileName = uriToFileName(uri);
-    const offset = positionToOffset(doc.text, position);
+    const fileName = uri.replace(/^file:\/\//, '');
+
+    const offset = TextDocumentManager.positionToOffset(uri, position);
 
     const ls = ensureLanguageService();
 
@@ -159,19 +120,17 @@ const handlers = {
     };
   },
 
-  /* hover */
+  /* ---------- hover ---------- */
 
-  'textDocument/hover': async (params) => {
+  'textDocument/hover': async ({ textDocument, position }) => {
     if (!initialized) return null;
 
-    const uri = params?.textDocument?.uri;
-    const position = params?.position;
-
-    const doc = uri ? documents.get(uri) : null;
+    const uri = textDocument?.uri;
+    const doc = TextDocumentManager.get(uri);
     if (!doc) return null;
 
-    const fileName = uriToFileName(uri);
-    const offset = positionToOffset(doc.text, position);
+    const fileName = uri.replace(/^file:\/\//, '');
+    const offset = TextDocumentManager.positionToOffset(uri, position);
 
     const ls = ensureLanguageService();
 
@@ -198,7 +157,7 @@ const handlers = {
 };
 
 /* --------------------------------------------------
- * RPC loop
+ * JSON-RPC loop
  * -------------------------------------------------- */
 
 self.onmessage = async (e) => {
@@ -244,4 +203,3 @@ self.onmessage = async (e) => {
 
 postLog('Worker loaded and ready.');
 self.postMessage({ jsonrpc: '2.0', method: 'worker/ready' });
-

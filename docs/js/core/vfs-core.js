@@ -149,8 +149,8 @@ class VfsCoreClass {
         noEmit: true,
         allowImportingTsExtensions: true,
         allowArbitraryExtensions: true,
-        resolvePackageJsonExports: true,
-        resolvePackageJsonImports: true,
+        resolvePackageJsonExports: false,
+        resolvePackageJsonImports: false,
       }
     );
 
