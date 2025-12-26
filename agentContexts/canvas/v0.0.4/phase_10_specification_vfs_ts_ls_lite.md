@@ -274,3 +274,111 @@ Node 依存 API を内部で呼ばせないよう
 - Node 的依存や過剰解決を誘発する可能性のある項目は除外
 - hover / completion の安定性に寄与する実用的ミニマムセットとする
 
+
+## TextDocumentManager 仕様・設計（確定版）
+
+### 1. 役割と責務
+- LSP Text Document Life-cycle の管理（open/change/close）
+- VfsCore との整合性維持
+- バージョン番号管理（incremental）
+- テキストスナップショット提供
+- LSP Position/Range とオフセット変換の委譲管理
+- 例外発生時のフェイルセーフ（不整合を残さない）
+
+### 2. 基本ポリシー
+- 既存機能の活用を最優先（独自実装の最小化）
+- LSP 仕様準拠（Protocol 準拠・互換性重視）
+- 薄いラッパー構造
+- 状態管理は厳密・保守性重視
+- 破壊的更新は行わず、常に整合性を確認
+
+---
+
+## TextDocumentManager クラス骨格
+
+```js
+// core/text-document-manager.js
+
+export class TextDocumentManager {
+  constructor({ vfs }) {
+    this.vfs = vfs;                  // VfsCore 依存注入
+    this.documents = new Map();      // uri -> { version, languageId, text }
+  }
+
+  // LSP: textDocument/didOpen
+  open({ uri, languageId, text }) {
+    // 例外方針: 既に open 済みなら上書きせず version を 1 で再登録
+  }
+
+  // LSP: textDocument/didChange
+  change({ uri, contentChanges }) {
+    // version++ の厳密管理
+    // full text / incremental の両対応（まずは full text 優先）
+  }
+
+  // LSP: textDocument/didClose
+  close({ uri }) {
+    // VFS 上の実体は残す（LSP 仕様通り）
+    // manager の active-set から除外
+  }
+
+  getText(uri) {}
+  getVersion(uri) {}
+  has(uri) {}
+}
+```
+
+---
+
+## 例外方針
+- 不明な URI → 例外ではなく安全失敗（no-op + ログ）
+- VFS 書き込み失敗 → manager state をロールバックしない（不整合ログ）
+- API 呼び出し元に throw しない（LSP ループを止めない）
+
+---
+
+## 同期モデル
+- TextDocumentManager は state owner
+- VfsCore は storage owner
+- 書き込み順序:
+  1) Manager state 更新
+  2) VFS 反映
+- いずれか失敗時:
+  - LSP へは error を返さずログ通知
+  - 次回操作で自己修復可能な形で保持
+
+---
+
+## LSP 連携
+- didOpen → `open()`
+- didChange → `change()`
+- didClose → `close()`
+- Hover/Completion 等は `getText()` と `getVersion()` を参照
+
+---
+
+## 堅牢実装要点
+- version は 1 origin 整数連番
+- close 後の didChange は無視
+- open なしの didChange は no-op
+- full-text change を優先採用（incremental は後続拡張）
+
+---
+
+## VfsCore との統合
+- TextDocumentManager は VfsCore に依存する（逆依存禁止）
+- open/change 時:
+  - VFS `writeFile(uri, text)` を呼び出す
+- close 時:
+  - VFS は削除しない（LSP 準拠）
+
+---
+
+## 実装ステップ
+1. クラス骨格の commit
+2. didOpen/didChange/didClose API 準拠
+3. version 管理実装
+4. VfsCore 連携
+5. 例外ハンドリング・ログ
+6. incremental change への拡張余地確保
+
