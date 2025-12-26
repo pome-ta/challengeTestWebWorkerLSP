@@ -1,5 +1,5 @@
 // core/vfs-core.js
-// v0.0.4.2 Phase 10 基盤実装(VFS + TS Language Service-lite)
+// v0.0.4.2 Phase 10 決定版: 強いライフサイクル管理 + 閉世界VFS + TS Language Service
 
 import {
   createDefaultMapFromCDN,
@@ -12,32 +12,30 @@ import { sleep } from '../util/async-utils.js';
 import { postLog } from '../util/logger.js';
 
 class VfsCoreClass {
-  #env = null;
-  #system = null;
-  #fsMap = null;
-  #initializing = null;
-  #ready = false;
-  #disposed = false;
-  #envId = 0;
+  //
+  // ---------- private state ----------
+  //
+  #env = null;             // VirtualTypeScriptEnvironment
+  #system = null;          // VFS System
+  #fsMap = null;           // Map<string,string>
+  #initializing = null;    // Promise | null
+  #ready = false;          // boolean
+  #disposed = false;       // boolean
+  #envId = 0;              // monotonic counter
 
   //
   // ---------- public lifecycle ----------
   //
 
   /**
-   * 外部 API:
-   *  - 再入可能
-   *  - 複数回 await OK
-   *  - 1回だけ init を走らせる
+   * 再入可能・多重 await 安全
+   * ただし内部初期化は 1 回のみ
    */
   async ensureReady() {
     this.#assertNotDisposed();
 
-    if (this.#ready) {
-      return;
-    }
+    if (this.#ready) return;
 
-    // 二重初期化防止
     if (!this.#initializing) {
       this.#initializing = this.#init();
     }
@@ -46,14 +44,14 @@ class VfsCoreClass {
   }
 
   /**
-   * 完全破棄
-   * - 以後の使用は禁止
-   * - strong reference を切る
+   * 完全廃棄
+   * 以降の利用は禁止
    */
   dispose() {
     if (this.#disposed) return;
 
     try {
+      // テスト用 reset 手続きも再利用
       this.resetForTest();
     } finally {
       this.#env = null;
@@ -61,11 +59,13 @@ class VfsCoreClass {
       this.#fsMap = null;
       this.#disposed = true;
     }
+
+    postLog('VfsCore disposed');
   }
 
   /**
    * テスト用リセット
-   * - dispose と異なりインスタンス再利用前提
+   * dispose と異なり再利用前提
    */
   resetForTest() {
     this.#assertNotDisposed();
@@ -73,31 +73,33 @@ class VfsCoreClass {
     this.#env = null;
     this.#system = null;
     this.#fsMap = null;
-    this.#ready = false;
     this.#initializing = null;
+    this.#ready = false;
     this.#envId = 0;
+
+    postLog('VfsCore resetForTest executed');
   }
 
   /**
-   * デバッグ・監視用
+   * デバッグ/監視用
    */
   getEnvInfo() {
     return {
       ready: this.#ready,
       disposed: this.#disposed,
       hasEnv: this.#env !== null,
-      tsVersion: ts.version,
       envId: this.#envId,
+      tsVersion: ts.version,
+      fsSize: this.#fsMap?.size ?? 0,
     };
   }
 
   //
-  // ---------- VFS / Document API ----------
+  // ---------- public VFS / Doc API ----------
   //
 
   readFile(uri) {
     this.#assertReady();
-
     return this.#fsMap.get(uri) ?? null;
   }
 
@@ -107,13 +109,13 @@ class VfsCoreClass {
     this.#fsMap.set(uri, text);
     this.#system.writeFile(uri, text);
 
-    // TS 서비스に反映(必須)
+    // TS language service へ反映(必須)
     this.#env.updateFile(uri, text);
   }
 
   /**
-   * Language Service の公開
-   * Phase 10 の本質
+   * Language Service の提供
+   * Phase 10 の中核
    */
   getLanguageService() {
     this.#assertReady();
@@ -128,13 +130,13 @@ class VfsCoreClass {
     this.#envId++;
     postLog(`VfsCore init start (env #${this.#envId})`);
 
-    // 1 lib の CDN 取得
+    // 1. lib files from CDN (retry + timeout)
     this.#fsMap = await this.#createDefaultMapWithRetry();
 
-    // 2 system
+    // 2. virtual system
     this.#system = createSystem(this.#fsMap);
 
-    // 3 env with Language Service
+    // 3. environment + language service
     this.#env = createVirtualTypeScriptEnvironment(
       this.#system,
       [],
@@ -157,14 +159,17 @@ class VfsCoreClass {
   }
 
   //
-  // ---------- CDN fetch with retry ----------
+  // ---------- CDN lib fetch with retry ----------
   //
 
-  async #createDefaultMapWithRetry(retryCount = 3, perAttemptTimeoutMs = 7000) {
+  async #createDefaultMapWithRetry(
+    retryCount = 3,
+    perAttemptTimeoutMs = 8000
+  ) {
     let lastError = null;
 
     for (let attempt = 1; attempt <= retryCount; attempt++) {
-      postLog(`VFS: lib fetch attempt ${attempt}/${retryCount}`);
+      postLog(`VFS lib fetch attempt ${attempt}/${retryCount}`);
 
       try {
         const result = await Promise.race([
@@ -182,30 +187,33 @@ class VfsCoreClass {
           ),
         ]);
 
-        postLog(`VFS: lib fetch success size=${result.size}`);
+        postLog(`VFS lib fetch success size=${result.size}`);
         return result;
 
       } catch (err) {
         lastError = err;
         const msg = String(err?.message ?? err);
 
+        // hard-fail on network-level errors
         if (msg.includes('NetworkError')) {
-          postLog(`VFS: network error → abort`);
+          postLog('VFS lib fetch network error → abort');
           throw err;
         }
 
+        // timed out → retry with backoff
         if (msg.includes('timeout')) {
-          postLog(`VFS: timeout, retry after backoff`);
+          postLog('VFS lib fetch timeout → retry with backoff');
           await sleep(1000 * attempt);
           continue;
         }
 
-        postLog(`VFS: unexpected error`);
+        // unexpected error
+        postLog('VFS lib fetch unexpected error → abort');
         throw err;
       }
     }
 
-    throw lastError || new Error('VFS default map init failed');
+    throw lastError || new Error('VFS default map initialization failed');
   }
 
   //
