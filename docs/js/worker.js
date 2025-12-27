@@ -1,41 +1,35 @@
 // worker.js
-// v0.0.4.2 Phase 10 完成版
-// VfsCore + TextDocumentManager + TS Compiler API Language Service
+// v0.0.4.2 Phase 10: VfsCore + TextDocumentManager + TS Language Service
 
 import * as ts from 'https://esm.sh/typescript';
 import { VfsCore } from './core/vfs-core.js';
 import { TextDocumentManager } from './core/text-document-manager.js';
-import { LspCore } from './core/lsp-core.js';
-import { postLog, setDebug } from './util/logger.js';
-
-setDebug(true);
+import { postLog } from './util/logger.js';
 
 /* --------------------------------------------------
- * 状態
+ * core instances
  * -------------------------------------------------- */
+
+const vfsCore = new VfsCore();
+const textDocuments = new TextDocumentManager(vfsCore);
 
 let initialized = false;
-
-/* --------------------------------------------------
- * Language Service
- * -------------------------------------------------- */
-
 let languageService = null;
 
-/**
- * VfsCore 上に TS Language Service を構築
- */
+/* --------------------------------------------------
+ * Language Service bootstrap
+ * -------------------------------------------------- */
+
 function ensureLanguageService() {
   if (languageService) return languageService;
 
-  const env = VfsCore.getLanguageService(); // ← ここが Phase10 の本質
-  languageService = env; // そのまま公開
-
+  const env = VfsCore.getLanguageService();
+  languageService = env;
   return languageService;
 }
 
 /* --------------------------------------------------
- * handler implementations
+ * handlers
  * -------------------------------------------------- */
 
 const handlers = {
@@ -43,67 +37,47 @@ const handlers = {
 
   'worker/ready': async () => ({ ok: true }),
 
-  /* ---------- VFS ---------- */
-
-  'vfs/ensureReady': async () => {
-    await VfsCore.ensureReady();
-    return { ok: true };
-  },
-
-  /* ---------- document lifecycle ---------- */
-
-  // 変更点: TextDocumentManager に委譲
-  'vfs/openFile': async ({ uri, content }) => {
-    await VfsCore.ensureReady();
-
-    TextDocumentManager.open(uri, content);
-
-    // VFS に反映
-    VfsCore.writeFile(uri, content);
-
-    // LS 準備
-    ensureLanguageService();
-
-    return { ok: true };
-  },
-
-  'textDocument/didChange': async ({ uri, content }) => {
-    TextDocumentManager.update(uri, content);
-    VfsCore.writeFile(uri, content);
-    return { ok: true };
-  },
-
-  'textDocument/didClose': async ({ uri }) => {
-    TextDocumentManager.close(uri);
-    return { ok: true };
-  },
-
-  /* ---------- LSP initialize ---------- */
-
   'lsp/initialize': async (params) => {
-    await VfsCore.ensureReady();
-
-    const result = await LspCore.initialize(params);
-
+    await vfsCore.ensureReady();
     ensureLanguageService();
     initialized = true;
+    return { capabilities: {} };
+  },
 
-    return result;
+  /* ---------- TextDocument lifecycle ---------- */
+
+  'textDocument/didOpen': async (params) => {
+    await textDocuments.didOpen(params);
+    ensureLanguageService();
+    return { ok: true };
+  },
+
+  'textDocument/didChange': async (params) => {
+    await textDocuments.didChange(params);
+    return { ok: true };
+  },
+
+  'textDocument/didClose': async (params) => {
+    await textDocuments.didClose(params);
+    return { ok: true };
   },
 
   /* ---------- completion ---------- */
 
-  // 変更点: DocumentManager + VfsCore + Compiler API の統合
   'textDocument/completion': async ({ textDocument, position }) => {
     if (!initialized) return { isIncomplete: false, items: [] };
 
     const uri = textDocument?.uri;
-    const doc = TextDocumentManager.get(uri);
+    const doc = textDocuments.get(uri);
     if (!doc) return { isIncomplete: false, items: [] };
 
     const fileName = uri.replace(/^file:\/\//, '');
 
-    const offset = TextDocumentManager.positionToOffset(uri, position);
+    // naive: UTF-16 index conversion省略版
+    const offset = doc.text
+      .split('\n')
+      .slice(0, position.line)
+      .join('\n').length + position.character;
 
     const ls = ensureLanguageService();
 
@@ -126,31 +100,29 @@ const handlers = {
     if (!initialized) return null;
 
     const uri = textDocument?.uri;
-    const doc = TextDocumentManager.get(uri);
+    const doc = textDocuments.get(uri);
     if (!doc) return null;
 
     const fileName = uri.replace(/^file:\/\//, '');
-    const offset = TextDocumentManager.positionToOffset(uri, position);
+
+    const offset = doc.text
+      .split('\n')
+      .slice(0, position.line)
+      .join('\n').length + position.character;
 
     const ls = ensureLanguageService();
-
     const info = ls.getQuickInfoAtPosition(fileName, offset);
-    if (!info) {
-      return { contents: { kind: 'plaintext', value: 'unknown' } };
-    }
+    if (!info) return null;
 
     const display = ts.displayPartsToString(info.displayParts ?? []);
     const documentation = ts.displayPartsToString(info.documentation ?? []);
 
-    const value =
-      documentation && documentation.trim().length > 0
-        ? `${display}\n\n${documentation}`
-        : display;
-
     return {
       contents: {
         kind: 'plaintext',
-        value: value || 'unknown',
+        value: documentation
+          ? `${display}\n\n${documentation}`
+          : display,
       },
     };
   },
@@ -189,7 +161,7 @@ self.onmessage = async (e) => {
         jsonrpc: '2.0',
         id,
         error: {
-          code: err?.code ?? -32000,
+          code: -32000,
           message: err?.message ?? String(err),
         },
       });
