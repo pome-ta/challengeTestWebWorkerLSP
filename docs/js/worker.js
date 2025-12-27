@@ -10,7 +10,7 @@ import { postLog } from './util/logger.js';
  * core instances
  * -------------------------------------------------- */
 
-const vfsCore = new VfsCore();
+const vfsCore = VfsCore; // 既存設計: シングルトン
 const textDocuments = new TextDocumentManager(vfsCore);
 
 let initialized = false;
@@ -23,8 +23,10 @@ let languageService = null;
 function ensureLanguageService() {
   if (languageService) return languageService;
 
-  const env = VfsCore.getLanguageService();
+  // VfsCore のラッパー API に委譲
+  const env = vfsCore.getLanguageService();
   languageService = env;
+
   return languageService;
 }
 
@@ -36,29 +38,66 @@ const handlers = {
   /* ---------- lifecycle ---------- */
 
   'worker/ready': async () => ({ ok: true }),
+/* ---------- VFS ---------- */
+
+'vfs/ensureReady': async () => {
+  await vfsCore.ensureReady();
+  return { ok: true };
+},
+
 
   'lsp/initialize': async (params) => {
     await vfsCore.ensureReady();
     ensureLanguageService();
     initialized = true;
-    return { capabilities: {} };
+
+    return {
+      capabilities: {},
+    };
   },
 
-  /* ---------- TextDocument lifecycle ---------- */
+  /* ---------- TextDocument lifecycle (LSP → 内部APIへマッピング) ---------- */
 
   'textDocument/didOpen': async (params) => {
-    await textDocuments.didOpen(params);
+    const { textDocument } = params;
+
+    await textDocuments.open({
+      uri: textDocument.uri,
+      text: textDocument.text,
+      languageId: textDocument.languageId,
+      version: textDocument.version,
+    });
+
     ensureLanguageService();
     return { ok: true };
   },
 
   'textDocument/didChange': async (params) => {
-    await textDocuments.didChange(params);
+    const { textDocument, contentChanges } = params;
+
+    if (!contentChanges?.length) {
+      throw new Error('didChange with no contentChanges');
+    }
+
+    // Phase10: full text 更新のみ対応
+    const newText = contentChanges[0].text;
+
+    await textDocuments.change({
+      uri: textDocument.uri,
+      text: newText,
+      version: textDocument.version,
+    });
+
     return { ok: true };
   },
 
   'textDocument/didClose': async (params) => {
-    await textDocuments.didClose(params);
+    const { textDocument } = params;
+
+    await textDocuments.close({
+      uri: textDocument.uri,
+    });
+
     return { ok: true };
   },
 
@@ -73,11 +112,10 @@ const handlers = {
 
     const fileName = uri.replace(/^file:\/\//, '');
 
-    // naive: UTF-16 index conversion省略版
-    const offset = doc.text
-      .split('\n')
-      .slice(0, position.line)
-      .join('\n').length + position.character;
+    // 仮: UTF-16 変換省略のオフセット計算
+    const offset =
+      doc.text.split('\n').slice(0, position.line).join('\n').length +
+      position.character;
 
     const ls = ensureLanguageService();
 
@@ -105,14 +143,21 @@ const handlers = {
 
     const fileName = uri.replace(/^file:\/\//, '');
 
-    const offset = doc.text
-      .split('\n')
-      .slice(0, position.line)
-      .join('\n').length + position.character;
+    const offset =
+      doc.text.split('\n').slice(0, position.line).join('\n').length +
+      position.character;
 
     const ls = ensureLanguageService();
+
     const info = ls.getQuickInfoAtPosition(fileName, offset);
-    if (!info) return null;
+    if (!info) {
+      return {
+        contents: {
+          kind: 'plaintext',
+          value: 'unknown',
+        },
+      };
+    }
 
     const display = ts.displayPartsToString(info.displayParts ?? []);
     const documentation = ts.displayPartsToString(info.documentation ?? []);
@@ -120,9 +165,10 @@ const handlers = {
     return {
       contents: {
         kind: 'plaintext',
-        value: documentation
-          ? `${display}\n\n${documentation}`
-          : display,
+        value:
+          documentation && documentation.trim().length > 0
+            ? `${display}\n\n${documentation}`
+            : display,
       },
     };
   },
@@ -153,7 +199,11 @@ self.onmessage = async (e) => {
   try {
     const result = await handler(params);
     if (id != null) {
-      self.postMessage({ jsonrpc: '2.0', id, result });
+      self.postMessage({
+        jsonrpc: '2.0',
+        id,
+        result,
+      });
     }
   } catch (err) {
     if (id != null) {

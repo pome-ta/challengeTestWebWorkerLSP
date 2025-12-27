@@ -4,106 +4,41 @@
 export class TextDocumentManager {
   constructor(vfsCore) {
     if (!vfsCore) {
-      throw new Error("TextDocumentManager: vfsCore is required");
+      throw new Error("TextDocumentManager requires VfsCore instance");
+    }
+    this.vfs = vfsCore;
+    this.opened = new Map(); // uri -> version(optional)
+  }
+
+  async open(uri, content) {
+    await this.vfs.writeFile(uri, content);
+    this.opened.set(uri, { version: 1 });
+  }
+
+  async change(uri, newContent) {
+    if (!this.opened.has(uri)) {
+      throw new Error(`Document not opened: ${uri}`);
     }
 
-    this.vfsCore = vfsCore;
+    await this.vfs.writeFile(uri, newContent);
 
-    // uri -> { text, version, languageId, isOpen }
-    this.documents = new Map();
+    const entry = this.opened.get(uri);
+    entry.version += 1;
+  }
+
+  async close(uri) {
+    this.opened.delete(uri);
+
+    // VFS からも削除するかはポリシー次第
+    // ここでは安全側に倒し「削除はしない」
+    // LSP でも close = untrack が原則で delete ではない
+  }
+
+  async getContent(uri) {
+    return await this.vfs.readFile(uri);
   }
 
   has(uri) {
-    return this.documents.has(uri);
-  }
-
-  getText(uri) {
-    const doc = this.documents.get(uri);
-    if (!doc) {
-      throw new Error(`TextDocumentManager: document not found: ${uri}`);
-    }
-    return doc.text;
-  }
-
-  /* ------------------------
-   * 内部 API (推奨呼び出し)
-   * ------------------------ */
-
-  async open({ uri, languageId = 'typescript', text, version = 1 }) {
-    await this.vfsCore.ensureReady();
-
-    this.documents.set(uri, {
-      text,
-      version,
-      languageId,
-      isOpen: true,
-    });
-
-    await this.vfsCore.writeFile(uri, text);
-  }
-
-  async change({ uri, version, text }) {
-    const doc = this.documents.get(uri);
-
-    if (!doc || !doc.isOpen) {
-      throw new Error(`TextDocumentManager: change on unopened ${uri}`);
-    }
-
-    if (version != null && doc.version != null && version <= doc.version) {
-      throw new Error(
-        `TextDocumentManager: version regression: ${doc.version} -> ${version} (${uri})`
-      );
-    }
-
-    doc.text = text;
-    doc.version = version;
-
-    await this.vfsCore.writeFile(uri, text);
-  }
-
-  async close({ uri }) {
-    const doc = this.documents.get(uri);
-
-    if (!doc) {
-      throw new Error(`TextDocumentManager: close on unknown ${uri}`);
-    }
-
-    doc.isOpen = false;
-  }
-
-  /* ------------------------
-   * LSP 互換 wrapper
-   * ------------------------ */
-
-  async didOpen(params) {
-    const { textDocument } = params;
-    return this.open({
-      uri: textDocument.uri,
-      text: textDocument.text,
-      version: textDocument.version,
-      languageId: textDocument.languageId,
-    });
-  }
-
-  async didChange(params) {
-    const { textDocument, contentChanges } = params;
-
-    if (!contentChanges?.length) {
-      throw new Error("TextDocumentManager: empty contentChanges");
-    }
-
-    // Phase10 では full text のみサポート
-    const newText = contentChanges[0].text;
-
-    return this.change({
-      uri: textDocument.uri,
-      version: textDocument.version,
-      text: newText,
-    });
-  }
-
-  async didClose(params) {
-    const { textDocument } = params;
-    return this.close({ uri: textDocument.uri });
+    return this.opened.has(uri);
   }
 }
