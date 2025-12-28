@@ -15,13 +15,13 @@ class VfsCoreClass {
   //
   // ---------- private state ----------
   //
-  #env = null;             // VirtualTypeScriptEnvironment
-  #system = null;          // VFS System
-  #fsMap = null;           // Map<string,string>
-  #initializing = null;    // Promise | null
-  #ready = false;          // boolean
-  #disposed = false;       // boolean
-  #envId = 0;              // monotonic counter
+  #env = null; // VirtualTypeScriptEnvironment
+  #system = null; // VFS System
+  #fsMap = null; // Map<string,string>
+  #initializing = null; // Promise | null
+  #ready = false; // boolean
+  #disposed = false; // boolean
+  #envId = 0; // monotonic counter
 
   //
   // ---------- public lifecycle ----------
@@ -137,22 +137,17 @@ class VfsCoreClass {
     this.#system = createSystem(this.#fsMap);
 
     // 3. environment + language service
-    this.#env = createVirtualTypeScriptEnvironment(
-      this.#system,
-      [],
-      ts,
-      {
-        target: ts.ScriptTarget.ES2022,
-        module: ts.ModuleKind.ESNext,
-        strict: true,
-        skipLibCheck: true,
-        noEmit: true,
-        allowImportingTsExtensions: true,
-        allowArbitraryExtensions: true,
-        resolvePackageJsonExports: false,
-        resolvePackageJsonImports: false,
-      }
-    );
+    this.#env = createVirtualTypeScriptEnvironment(this.#system, [], ts, {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ESNext,
+      strict: true,
+      skipLibCheck: true,
+      noEmit: true,
+      allowImportingTsExtensions: true,
+      allowArbitraryExtensions: true,
+      resolvePackageJsonExports: false,
+      resolvePackageJsonImports: false,
+    });
 
     this.#ready = true;
     postLog(`VfsCore init complete (env #${this.#envId})`);
@@ -162,10 +157,7 @@ class VfsCoreClass {
   // ---------- CDN lib fetch with retry ----------
   //
 
-  async #createDefaultMapWithRetry(
-    retryCount = 3,
-    perAttemptTimeoutMs = 8000
-  ) {
+  async #createDefaultMapWithRetry(retryCount = 3, perAttemptTimeoutMs = 8000) {
     let lastError = null;
 
     for (let attempt = 1; attempt <= retryCount; attempt++) {
@@ -189,7 +181,6 @@ class VfsCoreClass {
 
         postLog(`VFS lib fetch success size=${result.size}`);
         return result;
-
       } catch (err) {
         lastError = err;
         const msg = String(err?.message ?? err);
