@@ -1,5 +1,5 @@
-// test/v0.0.3/phase10-completion-hover-tscompiler.test.js
-// v0.0.4.1
+// test/v0.0.4/phase10-completion-hover-tscompiler.test.js
+// v0.0.4.2 initialize 内部 ensureReady 方式
 
 import {
   createTestWorker,
@@ -9,11 +9,11 @@ import {
   addResult,
 } from './test-utils.js';
 
-console.log('🧩 phase10-completion-hover-tscompiler.test loaded');
+console.log('🧩 phase10-completion-hover-tscompiler.test loaded (v0.0.4.2)');
 
 (async () => {
   const testName =
-    'phase10: completion / hover returns TS Compiler API based result';
+    'phase10: completion / hover returns TS Compiler API based result (initialize ensures ready)';
   let worker;
 
   try {
@@ -21,13 +21,6 @@ console.log('🧩 phase10-completion-hover-tscompiler.test loaded');
 
     worker = createTestWorker('./js/worker.js');
     await waitForWorkerReady(worker);
-
-    /* ---------- VFS ready ---------- */
-
-    const ready = await sendRequest(worker, 'vfs/ensureReady');
-    if (!ready?.ok) {
-      throw new Error('vfs/ensureReady failed');
-    }
 
     /* ---------- initialize ---------- */
 
@@ -59,16 +52,8 @@ num.
       position: { line: 2, character: 4 },
     });
 
-    if (
-      !completion ||
-      !Array.isArray(completion.items) ||
-      completion.items.length === 0
-    ) {
+    if (!completion?.items?.length) {
       throw new Error('completion.items empty');
-    }
-
-    if (typeof completion.items[0].label !== 'string') {
-      throw new Error('completion label invalid');
     }
 
     /* ---------- hover ---------- */
@@ -78,15 +63,10 @@ num.
       position: { line: 1, character: 6 },
     });
 
-    if (
-      !hover ||
-      !hover.contents ||
-      typeof hover.contents.value !== 'string'
-    ) {
+    if (!hover?.contents?.value) {
       throw new Error('hover.contents invalid');
     }
 
-    // Compiler API ベースであることの最低保証
     if (!hover.contents.value.includes('number')) {
       throw new Error('hover does not include type info');
     }

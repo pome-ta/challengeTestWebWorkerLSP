@@ -1,29 +1,31 @@
 // worker.js
-// v0.0.4.2 Phase 10: VfsCore + TextDocumentManager + TS Language Service
+// Phase10: VfsCore + TextDocumentManager + TS Language Service
 
 import * as ts from 'https://esm.sh/typescript';
 import { VfsCore } from './core/vfs-core.js';
 import { TextDocumentManager } from './core/text-document-manager.js';
-import { postLog } from './util/logger.js';
+import { postLog ,setDebug} from './util/logger.js';
 
+
+setDebug(true);
 /* --------------------------------------------------
- * core instances
+ * instances
  * -------------------------------------------------- */
 
-const vfsCore = VfsCore; // 既存設計: シングルトン
+const vfsCore = VfsCore; // 既存設計のシングルトンを利用
 const textDocuments = new TextDocumentManager(vfsCore);
 
 let initialized = false;
 let languageService = null;
 
 /* --------------------------------------------------
- * Language Service bootstrap
+ * Language Service
  * -------------------------------------------------- */
 
 function ensureLanguageService() {
   if (languageService) return languageService;
 
-  // VfsCore のラッパー API に委譲
+  // VfsCore 側の既存 API を利用
   const env = vfsCore.getLanguageService();
   languageService = env;
 
@@ -38,17 +40,14 @@ const handlers = {
   /* ---------- lifecycle ---------- */
 
   'worker/ready': async () => ({ ok: true }),
-/* ---------- VFS ---------- */
-
-'vfs/ensureReady': async () => {
-  await vfsCore.ensureReady();
-  return { ok: true };
-},
-
 
   'lsp/initialize': async (params) => {
+    // ここで VFS 初期化まで含める
     await vfsCore.ensureReady();
+
+    // Language Service の起動
     ensureLanguageService();
+
     initialized = true;
 
     return {
@@ -56,48 +55,31 @@ const handlers = {
     };
   },
 
-  /* ---------- TextDocument lifecycle (LSP → 内部APIへマッピング) ---------- */
+  'lsp/initialized': async () => ({ ok: true }),
+
+  /* ---------- backward compatibility ---------- */
+
+  // 旧 API を呼ばれても壊れないように
+  'vfs/ensureReady': async () => {
+    await vfsCore.ensureReady();
+    return { ok: true };
+  },
+
+  /* ---------- TextDocument lifecycle ---------- */
 
   'textDocument/didOpen': async (params) => {
-    const { textDocument } = params;
-
-    await textDocuments.open({
-      uri: textDocument.uri,
-      text: textDocument.text,
-      languageId: textDocument.languageId,
-      version: textDocument.version,
-    });
-
+    await textDocuments.didOpen(params);
     ensureLanguageService();
     return { ok: true };
   },
 
   'textDocument/didChange': async (params) => {
-    const { textDocument, contentChanges } = params;
-
-    if (!contentChanges?.length) {
-      throw new Error('didChange with no contentChanges');
-    }
-
-    // Phase10: full text 更新のみ対応
-    const newText = contentChanges[0].text;
-
-    await textDocuments.change({
-      uri: textDocument.uri,
-      text: newText,
-      version: textDocument.version,
-    });
-
+    await textDocuments.didChange(params);
     return { ok: true };
   },
 
   'textDocument/didClose': async (params) => {
-    const { textDocument } = params;
-
-    await textDocuments.close({
-      uri: textDocument.uri,
-    });
-
+    await textDocuments.didClose(params);
     return { ok: true };
   },
 
@@ -112,7 +94,6 @@ const handlers = {
 
     const fileName = uri.replace(/^file:\/\//, '');
 
-    // 仮: UTF-16 変換省略のオフセット計算
     const offset =
       doc.text.split('\n').slice(0, position.line).join('\n').length +
       position.character;
@@ -150,14 +131,7 @@ const handlers = {
     const ls = ensureLanguageService();
 
     const info = ls.getQuickInfoAtPosition(fileName, offset);
-    if (!info) {
-      return {
-        contents: {
-          kind: 'plaintext',
-          value: 'unknown',
-        },
-      };
-    }
+    if (!info) return null;
 
     const display = ts.displayPartsToString(info.displayParts ?? []);
     const documentation = ts.displayPartsToString(info.documentation ?? []);
@@ -166,7 +140,7 @@ const handlers = {
       contents: {
         kind: 'plaintext',
         value:
-          documentation && documentation.trim().length > 0
+          documentation && documentation.trim()
             ? `${display}\n\n${documentation}`
             : display,
       },
@@ -199,11 +173,7 @@ self.onmessage = async (e) => {
   try {
     const result = await handler(params);
     if (id != null) {
-      self.postMessage({
-        jsonrpc: '2.0',
-        id,
-        result,
-      });
+      self.postMessage({ jsonrpc: '2.0', id, result });
     }
   } catch (err) {
     if (id != null) {
