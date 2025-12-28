@@ -16,6 +16,7 @@ self.postMessage({ jsonrpc: '2.0', method: 'worker/ready' });
 
 self.onmessage = async (event) => {
   const msg = event.data;
+  postLog('Worker self.onmessage');
 
   // request
   if (msg.id) {
