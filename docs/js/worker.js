@@ -1,35 +1,47 @@
 // worker.js
-// Phase10: VfsCore + TextDocumentManager + TS Language Service
+// v0.0.4.2 Phase 10: VfsCore + TextDocumentManager + TS Language Service
 
 import * as ts from 'https://esm.sh/typescript';
 import { VfsCore } from './core/vfs-core.js';
 import { TextDocumentManager } from './core/text-document-manager.js';
-import { postLog ,setDebug} from './util/logger.js';
+import { postLog,setDebug } from './util/logger.js';
 
 
 setDebug(true);
 /* --------------------------------------------------
- * instances
+ * singletons / instances
  * -------------------------------------------------- */
 
-const vfsCore = VfsCore; // 既存設計のシングルトンを利用
+// VfsCore はシングルトン前提（export const VfsCore = new ...）
+const vfsCore = VfsCore;
+
+// TextDocumentManager はインスタンス
 const textDocuments = new TextDocumentManager(vfsCore);
 
 let initialized = false;
 let languageService = null;
 
 /* --------------------------------------------------
- * Language Service
+ * Language Service bootstrap
  * -------------------------------------------------- */
 
 function ensureLanguageService() {
   if (languageService) return languageService;
 
-  // VfsCore 側の既存 API を利用
-  const env = vfsCore.getLanguageService();
+  const env = VfsCore.getLanguageService();
   languageService = env;
 
   return languageService;
+}
+
+/* --------------------------------------------------
+ * initialize → ensureReady を内包
+ * -------------------------------------------------- */
+
+async function initializeAll() {
+  await vfsCore.ensureReady();
+  ensureLanguageService();
+  initialized = true;
 }
 
 /* --------------------------------------------------
@@ -41,31 +53,20 @@ const handlers = {
 
   'worker/ready': async () => ({ ok: true }),
 
-  'lsp/initialize': async (params) => {
-    // ここで VFS 初期化まで含める
-    await vfsCore.ensureReady();
-
-    // Language Service の起動
-    ensureLanguageService();
-
-    initialized = true;
-
-    return {
-      capabilities: {},
-    };
+  'lsp/initialize': async () => {
+    await initializeAll();
+    return { capabilities: {} };
   },
 
   'lsp/initialized': async () => ({ ok: true }),
 
-  /* ---------- backward compatibility ---------- */
-
-  // 旧 API を呼ばれても壊れないように
+  // 互換性のため残す（直接 ensureReady したい場合にも耐える）
   'vfs/ensureReady': async () => {
     await vfsCore.ensureReady();
     return { ok: true };
   },
 
-  /* ---------- TextDocument lifecycle ---------- */
+  /* ---------- text document lifecycle ---------- */
 
   'textDocument/didOpen': async (params) => {
     await textDocuments.didOpen(params);
@@ -94,9 +95,12 @@ const handlers = {
 
     const fileName = uri.replace(/^file:\/\//, '');
 
+    // naive UTF-16 offset
     const offset =
-      doc.text.split('\n').slice(0, position.line).join('\n').length +
-      position.character;
+      doc.text
+        .split('\n')
+        .slice(0, position.line)
+        .join('\n').length + position.character;
 
     const ls = ensureLanguageService();
 
@@ -125,8 +129,10 @@ const handlers = {
     const fileName = uri.replace(/^file:\/\//, '');
 
     const offset =
-      doc.text.split('\n').slice(0, position.line).join('\n').length +
-      position.character;
+      doc.text
+        .split('\n')
+        .slice(0, position.line)
+        .join('\n').length + position.character;
 
     const ls = ensureLanguageService();
 
@@ -139,10 +145,9 @@ const handlers = {
     return {
       contents: {
         kind: 'plaintext',
-        value:
-          documentation && documentation.trim()
-            ? `${display}\n\n${documentation}`
-            : display,
+        value: documentation
+          ? `${display}\n\n${documentation}`
+          : display,
       },
     };
   },

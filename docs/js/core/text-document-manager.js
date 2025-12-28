@@ -1,121 +1,81 @@
 // core/text-document-manager.js
+// v0.0.4.2
 
 export class TextDocumentManager {
   constructor(vfsCore) {
-    if (!vfsCore) {
-      throw new Error('TextDocumentManager: vfsCore is required');
-    }
+    this.vfs = vfsCore;
 
-    this.vfsCore = vfsCore;
-
-    // uri -> { text, version, languageId, isOpen }
-    this.documents = new Map();
+    // uri -> { uri, languageId, version, text }
+    this.map = new Map();
   }
 
   /* --------------------------------------------------
-   * basic getters
+   * helpers
    * -------------------------------------------------- */
-
-  has(uri) {
-    return this.documents.has(uri);
-  }
 
   get(uri) {
-    const doc = this.documents.get(uri);
-    if (!doc) {
-      throw new Error(`TextDocumentManager: not found: ${uri}`);
-    }
-    return doc;
+    return this.map.get(uri) ?? null;
   }
 
-  getText(uri) {
-    return this.get(uri).text;
+  getAll() {
+    return [...this.map.values()];
   }
 
   /* --------------------------------------------------
-   * internal core API (直接呼び出し推奨)
-   * -------------------------------------------------- */
-
-  async open({ uri, languageId = 'typescript', text, version = 1 }) {
-    await this.vfsCore.ensureReady();
-
-    this.documents.set(uri, {
-      text,
-      version,
-      languageId,
-      isOpen: true,
-    });
-
-    await this.vfsCore.writeFile(uri, text);
-  }
-
-  async change({ uri, version, text }) {
-    const doc = this.documents.get(uri);
-
-    if (!doc || !doc.isOpen) {
-      throw new Error(`TextDocumentManager: change on unopened ${uri}`);
-    }
-
-    // version regression protection
-    if (version != null && doc.version != null && version <= doc.version) {
-      throw new Error(
-        `TextDocumentManager: version regression: ${doc.version} -> ${version} (${uri})`
-      );
-    }
-
-    doc.text = text;
-    doc.version = version;
-
-    await this.vfsCore.writeFile(uri, text);
-  }
-
-  async close({ uri }) {
-    const doc = this.documents.get(uri);
-
-    if (!doc) {
-      throw new Error(`TextDocumentManager: close on unknown ${uri}`);
-    }
-
-    doc.isOpen = false;
-  }
-
-  /* --------------------------------------------------
-   * LSP-compatible wrapper API
+   * didOpen
    * -------------------------------------------------- */
 
   async didOpen(params) {
     const { textDocument } = params;
+    if (!textDocument) return;
 
-    return this.open({
-      uri: textDocument.uri,
-      text: textDocument.text ?? '',
-      version: textDocument.version,
-      languageId: textDocument.languageId,
+    const { uri, languageId = 'typescript', version = 1, text } = textDocument;
+
+    // VFS にも反映
+    await this.vfs.writeFile(uri, text);
+
+    this.map.set(uri, {
+      uri,
+      languageId,
+      version,
+      text,
     });
   }
 
+  /* --------------------------------------------------
+   * didChange
+   * -------------------------------------------------- */
+
   async didChange(params) {
     const { textDocument, contentChanges } = params;
+    const uri = textDocument?.uri;
 
-    if (!contentChanges?.length) {
-      throw new Error('TextDocumentManager: empty contentChanges');
-    }
+    const current = this.map.get(uri);
+    if (!current) return;
 
-    // Phase 10: full text only
-    const newText = contentChanges[0].text;
+    // LSP 仕様に準拠：今回は full text だけを対象にする
+    const newText =
+      contentChanges?.[0]?.text != null ? contentChanges[0].text : current.text;
 
-    return this.change({
-      uri: textDocument.uri,
-      version: textDocument.version,
+    await this.vfs.writeFile(uri, newText);
+
+    this.map.set(uri, {
+      ...current,
+      version: textDocument.version ?? current.version + 1,
       text: newText,
     });
   }
 
-  async didClose(params) {
-    const { textDocument } = params;
+  /* --------------------------------------------------
+   * didClose
+   * -------------------------------------------------- */
 
-    return this.close({
-      uri: textDocument.uri,
-    });
+  async didClose(params) {
+    const uri = params?.textDocument?.uri;
+    if (!uri) return;
+
+    this.map.delete(uri);
+
+    // VFS からは消さない（言語サービスキャッシュのため）
   }
 }
