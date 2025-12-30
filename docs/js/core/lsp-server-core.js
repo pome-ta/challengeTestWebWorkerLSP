@@ -25,21 +25,14 @@ class LspServerCore {
     const ls = VfsCoreInstance.getLanguageService();
     const fileName = new URL(textDocument.uri).pathname;
 
-    return ls.getCompletionsAtPosition(
-      fileName,
-      this.offsetAt(fileName, position),
-      {}
-    );
+    return ls.getCompletionsAtPosition(fileName, this.offsetAt(fileName, position), {});
   }
 
   hover({ textDocument, position }) {
     const ls = VfsCoreInstance.getLanguageService();
     const fileName = new URL(textDocument.uri).pathname;
 
-    const info = ls.getQuickInfoAtPosition(
-      fileName,
-      this.offsetAt(fileName, position)
-    );
+    const info = ls.getQuickInfoAtPosition(fileName, this.offsetAt(fileName, position));
 
     if (!info) return null;
 

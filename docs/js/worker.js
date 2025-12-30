@@ -3,16 +3,13 @@
 import { LspServerCoreInstance } from './core/lsp-server-core.js';
 import { TextDocumentManagerInstance } from './core/text-document-manager.js';
 
-import { postLog,setDebug } from './util/logger.js';
-
+import { postLog, setDebug } from './util/logger.js';
 
 setDebug(true);
-
 
 // 起動完了通知
 postLog('Worker loaded and ready.');
 self.postMessage({ jsonrpc: '2.0', method: 'worker/ready' });
-
 
 self.onmessage = async (event) => {
   const msg = event.data;
@@ -75,4 +72,3 @@ async function handleNotification(msg) {
       return TextDocumentManagerInstance.didClose(params);
   }
 }
-
