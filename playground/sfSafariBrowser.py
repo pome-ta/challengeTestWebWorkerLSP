@@ -1,4 +1,4 @@
-_TOP_DIR_NAME = 'pystaJavaScriptPlayground'
+_TOP_DIR_NAME = 'challengeTestWebWorkerLSP'
 _MODULES_DIR_NAME = 'pystaRubiconModules'
 
 # todo: `./{_TOP_DIR_NAME}/{_MODULES_DIR_NAME}` にあるpackage のimport 準備
