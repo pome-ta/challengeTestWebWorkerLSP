@@ -1,11 +1,11 @@
-import { EditorView, basicSetup } from 'https://esm.sh/codemirror';
-import { javascript } from 'https://esm.sh/@codemirror/lang-javascript';
+import { EditorView, basicSetup } from 'codemirror';
+import { javascript } from '@codemirror/lang-javascript';
 // ★ autocompletion と一緒に completionKeymap をインポート
-import { autocompletion, completionKeymap } from 'https://esm.sh/@codemirror/autocomplete';
+import { autocompletion, completionKeymap } from '@codemirror/autocomplete';
 // ★ linter と一緒に forceLinting をインポート
-import { linter, lintGutter, forceLinting } from 'https://esm.sh/@codemirror/lint';
+import { linter, lintGutter, forceLinting } from '@codemirror/lint';
 // ★ キーボードのショートカットを登録するための keymap をインポート
-import { keymap } from 'https://esm.sh/@codemirror/view';
+import { keymap } from '@codemirror/view';
 
 const worker = new Worker('./js/worker.js', { type: 'module' });
 const statusEl = document.getElementById('status');
