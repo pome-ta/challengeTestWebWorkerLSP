@@ -12,7 +12,8 @@ let view;
 
 worker.addEventListener('message', (e) => {
   if (e.data.type === 'ready') {
-    statusEl.textContent = '✅ 準備完了! p5.jsの関数に色付き補完とエラー検知が効きます。';
+    statusEl.textContent =
+      '✅ 準備完了! p5.jsの関数に色付き補完とエラー検知が効きます。';
     statusEl.style.background = '#e8f5e9';
     statusEl.style.color = '#2e7d32';
 

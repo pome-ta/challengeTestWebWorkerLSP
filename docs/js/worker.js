@@ -31,7 +31,9 @@ const languageService = ts.createLanguageService(languageServiceHost);
 // ★ 外部ライブラリ (p5.js) + 標準ライブラリ (DOM等) の型定義を取得
 // ==========================================
 async function loadTypes() {
-  console.log('[Worker] 📦 型定義（p5.js + 標準ライブラリ）をダウンロード中...');
+  console.log(
+    '[Worker] 📦 型定義（p5.js + 標準ライブラリ）をダウンロード中...',
+  );
   try {
     // TypeScriptのバージョンに合わせて、unpkgから標準ライブラリをフェッチする
     // ※今回は簡略化のため、ESNext系の基本とDOMだけを取得します
@@ -42,9 +44,13 @@ async function loadTypes() {
       fetch('https://unpkg.com/@types/p5/index.d.ts').then((r) => r.text()),
       fetch('https://unpkg.com/@types/p5/global.d.ts').then((r) => r.text()),
       // ★ TS公式の DOM 型定義 (window, console, document 等)
-      fetch(`https://unpkg.com/typescript@${tsVersion}/lib/lib.dom.d.ts`).then((r) => r.text()),
+      fetch(`https://unpkg.com/typescript@${tsVersion}/lib/lib.dom.d.ts`).then(
+        (r) => r.text(),
+      ),
       // ★ TS公式の ES 基本型定義 (Array, String, Math 等)
-      fetch(`https://unpkg.com/typescript@${tsVersion}/lib/lib.es2022.d.ts`).then((r) => r.text()),
+      fetch(
+        `https://unpkg.com/typescript@${tsVersion}/lib/lib.es2022.d.ts`,
+      ).then((r) => r.text()),
     ]);
 
     files.set('/p5.d.ts', p5Index);
@@ -71,7 +77,11 @@ self.onmessage = (e) => {
 
   // ① 補完リストの要求
   if (type === 'complete') {
-    const completions = languageService.getCompletionsAtPosition('/main.ts', cursorPosition, {});
+    const completions = languageService.getCompletionsAtPosition(
+      '/main.ts',
+      cursorPosition,
+      {},
+    );
     self.postMessage({ type: 'complete', id, completions });
   }
 
@@ -85,7 +95,8 @@ self.onmessage = (e) => {
       from: diag.start,
       to: diag.start + diag.length,
       message: ts.flattenDiagnosticMessageText(diag.messageText, '\n'),
-      severity: diag.category === ts.DiagnosticCategory.Error ? 'error' : 'warning',
+      severity:
+        diag.category === ts.DiagnosticCategory.Error ? 'error' : 'warning',
     }));
 
     self.postMessage({ type: 'diagnostics', id, errors });
