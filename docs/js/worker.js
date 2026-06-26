@@ -1,104 +1,174 @@
-import ts from 'https://esm.sh/typescript';
+// worker.js
 
-console.log('[Worker] TypeScriptコンパイラを読み込みました！');
+// Web Worker内ではimportmapが効かないケースがあるため、直接esm.shからURLでインポートします
+import ts from 'https://esm.sh/typescript@5.4.5';
+import {
+  createDefaultMapFromCDN,
+  createSystem,
+  createVirtualCompilerHost,
+} from 'https://esm.sh/@typescript/vfs@1.5.0?deps=typescript@5.4.5';
 
-const files = new Map();
-files.set('/main.ts', '');
+// ==========================================
+// 1. 通信ヘルパー (LSP JSON-RPC 2.0 完全準拠)
+// ==========================================
 
-// TSのホスト環境（仮想ファイルシステム）
-const languageServiceHost = {
-  getScriptFileNames: () => Array.from(files.keys()),
-  getScriptVersion: () => Date.now().toString(),
-  getScriptSnapshot: (fileName) => {
-    if (!files.has(fileName)) return undefined;
-    return ts.ScriptSnapshot.fromString(files.get(fileName));
-  },
-  getCurrentDirectory: () => '/',
-  getCompilationSettings: () => ({
+// リクエストに対する成功レスポンスを返す
+function sendResponse(id, result) {
+  self.postMessage(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id: id,
+      result: result,
+    }),
+  );
+}
+
+// リクエストに対するエラーレスポンスを返す
+function sendError(id, code, message) {
+  self.postMessage(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      id: id,
+      error: { code, message },
+    }),
+  );
+}
+
+// 投げっぱなしの通知 (Notification) を送る
+function sendNotification(method, params = {}) {
+  self.postMessage(
+    JSON.stringify({
+      jsonrpc: '2.0',
+      method: method,
+      params: params,
+    }),
+  );
+}
+
+// 独自定義: ログ送信
+function postLog(message) {
+  sendNotification('worker/log', {
+    timestamp: new Date().toLocaleTimeString('ja-JP', {
+      hour12: false,
+      fractionalSecondDigits: 3,
+    }),
+    message: `[Worker] ${message}`,
+  });
+}
+
+// ==========================================
+// 2. 状態管理
+// ==========================================
+let languageService = null;
+let updateFile = null;
+let isReady = false;
+
+// ==========================================
+// 3. VFS と TS Compiler API の初期化
+// ==========================================
+async function init() {
+  postLog('TypeScriptコンパイラを読み込みました！');
+
+  const compilerOptions = {
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.ESNext,
-    // ★ 読み込む標準ライブラリを明記
     lib: ['lib.es2022.d.ts', 'lib.dom.d.ts'],
-  }),
-  getDefaultLibFileName: () => 'lib.d.ts',
-  fileExists: (fileName) => files.has(fileName),
-  readFile: (fileName) => files.get(fileName),
-};
+  };
 
-const languageService = ts.createLanguageService(languageServiceHost);
+  postLog('📦 標準ライブラリをダウンロード中...');
 
-// ==========================================
-// ★ 外部ライブラリ (p5.js) + 標準ライブラリ (DOM等) の型定義を取得
-// ==========================================
-async function loadTypes() {
-  console.log(
-    '[Worker] 📦 型定義（p5.js + 標準ライブラリ）をダウンロード中...',
-  );
-  try {
-    // TypeScriptのバージョンに合わせて、unpkgから標準ライブラリをフェッチする
-    // ※今回は簡略化のため、ESNext系の基本とDOMだけを取得します
-    const tsVersion = ts.version;
+  // ★ localStorageエラー回避: 第3引数(shouldCache)を false に設定し、ブラウザのHTTPキャッシュに任せる
+  const fsMap = await createDefaultMapFromCDN(compilerOptions, ts.version, false, ts);
 
-    const [p5Index, p5Global, domTypes, esTypes] = await Promise.all([
-      // p5.js の型
-      fetch('https://unpkg.com/@types/p5/index.d.ts').then((r) => r.text()),
-      fetch('https://unpkg.com/@types/p5/global.d.ts').then((r) => r.text()),
-      // ★ TS公式の DOM 型定義 (window, console, document 等)
-      fetch(`https://unpkg.com/typescript@${tsVersion}/lib/lib.dom.d.ts`).then(
-        (r) => r.text(),
-      ),
-      // ★ TS公式の ES 基本型定義 (Array, String, Math 等)
-      fetch(
-        `https://unpkg.com/typescript@${tsVersion}/lib/lib.es2022.d.ts`,
-      ).then((r) => r.text()),
-    ]);
+  postLog('📦 p5.jsの型定義をダウンロード中...');
 
-    files.set('/p5.d.ts', p5Index);
-    files.set('/p5.global.d.ts', p5Global);
-    // ★ 仮想ファイルシステムに標準ライブラリを登録
-    files.set('lib.dom.d.ts', domTypes);
-    files.set('lib.es2022.d.ts', esTypes);
+  const [p5Index, p5Global] = await Promise.all([
+    fetch('https://unpkg.com/@types/p5/index.d.ts').then((r) => r.text()),
+    fetch('https://unpkg.com/@types/p5/global.d.ts').then((r) => r.text()),
+  ]);
+  fsMap.set('/p5.d.ts', p5Index);
+  fsMap.set('/p5.global.d.ts', p5Global);
 
-    console.log('[Worker] ✨ 型定義ロード完了！');
-    self.postMessage({ type: 'ready' });
-  } catch (e) {
-    console.error('[Worker] 型定義の取得に失敗しました', e);
-  }
+  // ユーザーが編集するメインファイルを空で登録
+  fsMap.set('/main.ts', '');
+
+  // 仮想システムとコンパイラホストの作成
+  const system = createSystem(fsMap);
+  const hostConfig = createVirtualCompilerHost(system, compilerOptions, ts);
+
+  updateFile = hostConfig.updateFile;
+  languageService = ts.createLanguageService(hostConfig.compilerHost);
+
+  isReady = true;
+  postLog('✨ 準備完了！');
+
+  // メインスレッドへ準備完了を通知
+  sendNotification('worker/ready');
 }
-loadTypes();
 
-// --- 以下、onmessage の処理はそのまま ---
-self.onmessage = (e) => {
-  const { type, id, code, cursorPosition } = e.data;
+init().catch((err) => {
+  postLog(`初期化エラー: ${err.message}`);
+});
 
-  if (code !== undefined) {
-    files.set('/main.ts', code);
+// ==========================================
+// 4. メッセージ受信 (LSP サーバーとしての振る舞い)
+// ==========================================
+self.onmessage = (event) => {
+  let msg;
+  try {
+    // 送られてきた文字列を JSON オブジェクトにパース
+    msg = JSON.parse(event.data);
+  } catch (e) {
+    postLog(`JSON parse error: ${e.message}`);
+    return;
   }
 
-  // ① 補完リストの要求
-  if (type === 'complete') {
-    const completions = languageService.getCompletionsAtPosition(
-      '/main.ts',
-      cursorPosition,
-      {},
-    );
-    self.postMessage({ type: 'complete', id, completions });
+  // ------------------------------------------
+  // ★ 最重要: initialize リクエストへの応答 (Handshake)
+  // これを返さないと LSPClient がタイムアウトエラーを起こす
+  // ------------------------------------------
+  if (msg.method === 'initialize') {
+    sendResponse(msg.id, {
+      capabilities: {
+        // ドキュメントの同期をフル(ファイル全体)で行うことを宣言: 1 = Full
+        textDocumentSync: 1,
+        // 補完機能を提供することを宣言
+        completionProvider: {
+          resolveProvider: false,
+          triggerCharacters: ['.'], // 補完を自動トリガーする文字
+        },
+        // 今後、hoverProvider: true などをここに追加していく
+      },
+    });
+    return;
   }
 
-  // ② 赤い波線（エラー検知）の要求
-  else if (type === 'diagnostics') {
-    const syntactic = languageService.getSyntacticDiagnostics('/main.ts');
-    const semantic = languageService.getSemanticDiagnostics('/main.ts');
-    const allDiagnostics = [...syntactic, ...semantic];
+  // initialize リクエスト以外は、準備が終わるまで処理しない
+  if (!isReady) return;
 
-    const errors = allDiagnostics.map((diag) => ({
-      from: diag.start,
-      to: diag.start + diag.length,
-      message: ts.flattenDiagnosticMessageText(diag.messageText, '\n'),
-      severity:
-        diag.category === ts.DiagnosticCategory.Error ? 'error' : 'warning',
-    }));
-
-    self.postMessage({ type: 'diagnostics', id, errors });
+  // ------------------------------------------
+  // リクエスト (返事が必要なメッセージ) の処理
+  // ------------------------------------------
+  if (msg.id !== undefined) {
+    if (msg.method === 'textDocument/completion') {
+      // TODO: Phase 4 で実装。今回はプレースホルダーとして空を返す
+      sendResponse(msg.id, {
+        isIncomplete: false,
+        items: [],
+      });
+    } else {
+      sendError(msg.id, -32601, `Method not found: ${msg.method}`);
+    }
+  }
+  // ------------------------------------------
+  // 通知 (返事が不要なメッセージ) の処理
+  // ------------------------------------------
+  else {
+    if (msg.method === 'textDocument/didChange') {
+      // TODO: Phase 2, 3 で実装。
+      // ここで updateFile() を呼び、直後に診断(Diagnostics)をメインスレッドに publish する
+    } else if (msg.method === 'textDocument/didOpen') {
+      // TODO: 初期コードの受け取り処理
+    }
   }
 };
