@@ -1,3 +1,5 @@
+IS_SERVER = False  # note: server or local `index.html`
+
 _TOP_DIR_NAME = 'challengeTestWebWorkerLSP'
 _MODULES_DIR_NAME = 'pystaRubiconModules'
 
@@ -498,8 +500,6 @@ if __name__ == '__main__':
     #presentation_style = UIModalPresentationStyle.pageSheet
     app = App(main_vc, presentation_style)
     app.present(NavigationController)
-
-  IS_SERVER = False  # note: server or local `index.html`
 
   ROOT_PATH = Path(__file__).parents[0]
   index_path = ROOT_PATH / '../docs'
