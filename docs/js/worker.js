@@ -78,7 +78,12 @@ async function init() {
   postLog('📦 標準ライブラリをダウンロード中...');
 
   // ★ localStorageエラー回避: 第3引数(shouldCache)を false に設定し、ブラウザのHTTPキャッシュに任せる
-  const fsMap = await createDefaultMapFromCDN(compilerOptions, ts.version, false, ts);
+  const fsMap = await createDefaultMapFromCDN(
+    compilerOptions,
+    ts.version,
+    false,
+    ts,
+  );
 
   postLog('📦 p5.jsの型定義をダウンロード中...');
 

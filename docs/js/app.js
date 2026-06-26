@@ -76,7 +76,8 @@ const client = new LSPClient({
       return true; // 処理済みであることを返す
     },
     'worker/ready': (client, params) => {
-      statusEl.textContent = '✅ 準備完了！ TypeScript Compiler API が稼働しています。';
+      statusEl.textContent =
+        '✅ 準備完了！ TypeScript Compiler API が稼働しています。';
       statusEl.style.background = '#e8f5e9';
       statusEl.style.color = '#2e7d32';
       return true;
