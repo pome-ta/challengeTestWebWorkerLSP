@@ -69,21 +69,30 @@ let isReady = false;
 async function init() {
   postLog('TypeScriptコンパイラを読み込みました！');
 
+  /*
   const compilerOptions = {
     target: ts.ScriptTarget.ES2022,
     module: ts.ModuleKind.ESNext,
     lib: ['lib.es2022.d.ts', 'lib.dom.d.ts'],
   };
+  */
+  const compilerOptions = {
+    target: ts.ScriptTarget.ES2022,
+    lib: ["ES2022", "DOM"],
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    allowArbitraryExtensions: true,
+    allowJs: true,
+    checkJs: true,
+    strict: true,
+    noUnusedLocals: true,
+    noUnusedParameters: true,
+  };
 
   postLog('📦 標準ライブラリをダウンロード中...');
 
   // ★ localStorageエラー回避: 第3引数(shouldCache)を false に設定し、ブラウザのHTTPキャッシュに任せる
-  const fsMap = await createDefaultMapFromCDN(
-    compilerOptions,
-    ts.version,
-    false,
-    ts,
-  );
+  const fsMap = await createDefaultMapFromCDN(compilerOptions, ts.version, false, ts);
 
   postLog('📦 p5.jsの型定義をダウンロード中...');
 
