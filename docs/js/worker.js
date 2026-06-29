@@ -1,6 +1,7 @@
 // worker.js
 
 // Web Worker内ではimportmapが効かないケースがあるため、直接esm.shからURLでインポートします
+/*
 import ts from 'https://esm.sh/typescript@5.4.5';
 import {
   createDefaultMapFromCDN,
@@ -8,6 +9,14 @@ import {
   createVirtualCompilerHost,
   createVirtualTypeScriptEnvironment,
 } from 'https://esm.sh/@typescript/vfs@1.5.0?deps=typescript@5.4.5';
+*/
+import ts from "https://esm.sh/typescript";
+
+import {
+  createDefaultMapFromCDN,
+  createSystem,
+  createVirtualTypeScriptEnvironment,
+} from "https://esm.sh/@typescript/vfs";
 
 // ==========================================
 // 1. 通信ヘルパー (LSP JSON-RPC 2.0 完全準拠)
