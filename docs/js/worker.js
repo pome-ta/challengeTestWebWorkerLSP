@@ -95,15 +95,15 @@ async function init() {
   */
   const compilerOptions = {
     target: ts.ScriptTarget.ES2022,
-    lib: ['es2022', 'dom'],
-    module: ts.ModuleKind.ESNext,
-    moduleResolution: ts.ModuleResolutionKind.Bundler,
-    allowArbitraryExtensions: true,
+    // lib: ['es2022', 'dom'],
+    // module: ts.ModuleKind.ESNext,
+    // moduleResolution: ts.ModuleResolutionKind.Bundler,
+    // allowArbitraryExtensions: true,
     allowJs: true,
-    checkJs: true,
-    strict: true,
-    noUnusedLocals: true,
-    noUnusedParameters: true,
+    // checkJs: true,
+    // strict: true,
+    // noUnusedLocals: true,
+    // noUnusedParameters: true,
   };
 
   postLog('📦 標準ライブラリをダウンロード中...');
@@ -118,31 +118,30 @@ async function init() {
 
   postLog('📦 p5.jsの型定義をダウンロード中...');
 
-  const [p5Index, p5Global] = await Promise.all([
-    fetch('https://unpkg.com/@types/p5/index.d.ts').then((r) => r.text()),
-    fetch('https://unpkg.com/@types/p5/global.d.ts').then((r) => r.text()),
-  ]);
-  fsMap.set('/node_modules/@types/p5/index.d.ts', p5Index);
+  // const [p5Index, p5Global] = await Promise.all([
+  //   fetch('https://unpkg.com/@types/p5/index.d.ts').then((r) => r.text()),
+  //   fetch('https://unpkg.com/@types/p5/global.d.ts').then((r) => r.text()),
+  // ]);
+  // fsMap.set('/node_modules/@types/p5/index.d.ts', p5Index);
 
-  fsMap.set('/node_modules/@types/p5/global.d.ts', p5Global);
+  // fsMap.set('/node_modules/@types/p5/global.d.ts', p5Global);
 
   // ユーザーが編集するメインファイルを空で登録
-  fsMap.set('/main.ts', ' ');
+  // fsMap.set('/main.ts', ' ');
 
   // 仮想システムとコンパイラホストの作成
   const system = createSystem(fsMap);
   //const hostConfig = createVirtualCompilerHost(system, compilerOptions, ts);
-  postLog([...fsMap.keys()]);
+  // postLog([...fsMap.keys()]);
   const env = createVirtualTypeScriptEnvironment(
     system,
-    ['/main.ts'],
+    [],
     ts,
     compilerOptions,
   );
 
   languageService = env.languageService;
-  env.updateFile('/main.ts', dmy);
-
+  // env.updateFile('/main.ts', dmy);
 
   //updateFile = hostConfig.updateFile;
   //languageService = ts.createLanguageService(languageService);
@@ -152,6 +151,7 @@ async function init() {
 
   // メインスレッドへ準備完了を通知
   sendNotification('worker/ready');
+  env.createFile('/main.ts', dmy);
 }
 
 init().catch((err) => {
