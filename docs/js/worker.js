@@ -10,13 +10,20 @@ import {
   createVirtualTypeScriptEnvironment,
 } from 'https://esm.sh/@typescript/vfs@1.5.0?deps=typescript@5.4.5';
 */
-import ts from "https://esm.sh/typescript";
+import ts from 'https://esm.sh/typescript';
 
 import {
   createDefaultMapFromCDN,
   createSystem,
   createVirtualTypeScriptEnvironment,
-} from "https://esm.sh/@typescript/vfs";
+} from 'https://esm.sh/@typescript/vfs';
+
+const dmy = `
+function setup() {
+  createCanvas(400, 400);
+}
+
+`;
 
 // ==========================================
 // 1. 通信ヘルパー (LSP JSON-RPC 2.0 完全準拠)
@@ -88,7 +95,7 @@ async function init() {
   */
   const compilerOptions = {
     target: ts.ScriptTarget.ES2022,
-    lib: ['ES2022', 'DOM'],
+    lib: ['es2022', 'dom'],
     module: ts.ModuleKind.ESNext,
     moduleResolution: ts.ModuleResolutionKind.Bundler,
     allowArbitraryExtensions: true,
@@ -102,7 +109,12 @@ async function init() {
   postLog('📦 標準ライブラリをダウンロード中...');
 
   // ★ localStorageエラー回避: 第3引数(shouldCache)を false に設定し、ブラウザのHTTPキャッシュに任せる
-  const fsMap = await createDefaultMapFromCDN(compilerOptions, ts.version, false, ts);
+  const fsMap = await createDefaultMapFromCDN(
+    compilerOptions,
+    ts.version,
+    false,
+    ts,
+  );
 
   postLog('📦 p5.jsの型定義をダウンロード中...');
 
@@ -110,13 +122,12 @@ async function init() {
     fetch('https://unpkg.com/@types/p5/index.d.ts').then((r) => r.text()),
     fetch('https://unpkg.com/@types/p5/global.d.ts').then((r) => r.text()),
   ]);
-  fsMap.set("/node_modules/@types/p5/index.d.ts", p5Index);
+  fsMap.set('/node_modules/@types/p5/index.d.ts', p5Index);
 
-fsMap.set("/node_modules/@types/p5/global.d.ts", p5Global);
-
+  fsMap.set('/node_modules/@types/p5/global.d.ts', p5Global);
 
   // ユーザーが編集するメインファイルを空で登録
-  fsMap.set('/main.ts', '');
+  fsMap.set('/main.ts', ' ');
 
   // 仮想システムとコンパイラホストの作成
   const system = createSystem(fsMap);
@@ -124,15 +135,14 @@ fsMap.set("/node_modules/@types/p5/global.d.ts", p5Global);
   postLog([...fsMap.keys()]);
   const env = createVirtualTypeScriptEnvironment(
     system,
-
     ['/main.ts'],
-
     ts,
-
     compilerOptions,
   );
 
   languageService = env.languageService;
+  env.updateFile('/main.ts', dmy);
+
 
   //updateFile = hostConfig.updateFile;
   //languageService = ts.createLanguageService(languageService);
