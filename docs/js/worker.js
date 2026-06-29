@@ -127,7 +127,7 @@ async function init() {
   // fsMap.set('/node_modules/@types/p5/global.d.ts', p5Global);
 
   // ユーザーが編集するメインファイルを空で登録
-  // fsMap.set('/main.ts', ' ');
+  fsMap.set('/main.ts', ' ');
 
   // 仮想システムとコンパイラホストの作成
   const system = createSystem(fsMap);
@@ -135,13 +135,13 @@ async function init() {
   // postLog([...fsMap.keys()]);
   const env = createVirtualTypeScriptEnvironment(
     system,
-    [],
+    ['/main.ts'],
     ts,
     compilerOptions,
   );
 
   languageService = env.languageService;
-  // env.updateFile('/main.ts', dmy);
+  //env.updateFile('/main.ts', dmy);
 
   //updateFile = hostConfig.updateFile;
   //languageService = ts.createLanguageService(languageService);
@@ -151,7 +151,7 @@ async function init() {
 
   // メインスレッドへ準備完了を通知
   sendNotification('worker/ready');
-  env.createFile('/main.ts', dmy);
+  //env.createFile('/main.ts', dmy);
 }
 
 init().catch((err) => {

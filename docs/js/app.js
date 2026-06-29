@@ -91,7 +91,8 @@ client.connect(transport);
 // ==========================================
 // 4. CodeMirror の起動と LSP プラグインの適用
 // ==========================================
-const fileUri = 'file:///main.ts';
+//const fileUri = 'file:///main.ts';
+const fileUri = '/main.ts';
 const initialCode = `function setup() {\n  createCanvas(400, 400);\n}\n`;
 
 const view = new EditorView({
