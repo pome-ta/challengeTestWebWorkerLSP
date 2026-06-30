@@ -8,7 +8,3 @@
 
 - [TypeScript-Website/packages/ata at v2 · microsoft/TypeScript-Website · GitHub](https://github.com/microsoft/TypeScript-Website/tree/v2/packages/ata)
 - [TypeScript Playgroundでimportが使える、ATAって何？ #TypeScript - Qiita](https://qiita.com/daishi/items/ebdb303f69aef62a8301)
-
-
-
-
