@@ -3,8 +3,7 @@ export default class DomFactory {
   #buildEvent;
 
   constructor(domTag) {
-    this.#element =
-      typeof domTag === 'string' ? document.createElement(domTag) : domTag;
+    this.#element = typeof domTag === 'string' ? document.createElement(domTag) : domTag;
 
     this.#buildEvent = new CustomEvent('build', { detail: this.#element });
   }
@@ -19,9 +18,7 @@ export default class DomFactory {
 
   static create(tag, options) {
     const instance = new this(tag);
-    options
-      ? Object.entries(options).forEach(([key, value]) => instance[key](value))
-      : null;
+    options ? Object.entries(options).forEach(([key, value]) => instance[key](value)) : null;
     instance.element.dispatchEvent(instance.buildEvent);
 
     return instance.element;
