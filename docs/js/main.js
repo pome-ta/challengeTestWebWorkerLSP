@@ -1,4 +1,4 @@
-import { minimalSetup } from 'codemirror';
+import { minimalSetup, basicSetup } from 'codemirror';
 import { Compartment, EditorState, StateEffect, StateField } from '@codemirror/state';
 import {
   Decoration,
@@ -278,12 +278,13 @@ const initializeSetup = [
   EditorView.lineWrapping, // 改行
   tabSize.of(EditorState.tabSize.of(2)),
   javascriptLanguage,
-
-  initTheme,
+  
+  //initTheme,
   transparentTheme,
-  resOutlineTheme,
-  bgRectangleTheme,
-  updateCallback,
+  //resOutlineTheme,
+  //bgRectangleTheme,
+  //updateCallback,
+  
   client.plugin('file:///main.js'),
   oneDark, // 最後に設定
 ];
@@ -322,6 +323,7 @@ const setLayout = () => {
     setStyles: {
       //display: 'grid',
       //'grid-template-rows': 'auto 1fr auto',
+      //'grid-template-rows': 'auto',
       height: '100%',
       overflow: 'auto',
     },
