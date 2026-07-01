@@ -215,13 +215,6 @@ const worker = new Worker('./js/lsp-worker/worker.js', {
 
 const transport = createWorkerTransport(worker);
 
-const logHandlers = new Map([
-  [1, (msg) => console.error(msg)],
-  [2, (msg) => console.warn(msg)],
-  [3, (msg) => console.info(msg)],
-]);
-
-// ファイルの上部やクラスのプロパティとして定義しておく
 const LOG_LEVEL_MAP = {
   1: 'error',
   2: 'warn',
@@ -229,28 +222,22 @@ const LOG_LEVEL_MAP = {
   4: 'log',
 };
 
+const LOG_ICON_MAP = {
+  1: '🔴',
+  2: '🟧',
+  3: '🔵',
+  4: '⬛',
+};
+
 const client = new LSPClient({
   extensions: languageServerExtensions(),
   notificationHandlers: {
-    // // Worker からの window/logMessage を受け取って console に流す
-    // 'window/logMessage': (client, { type, message }) => {
-    //   (logHandlers.get(type) ?? ((msg) => console.log(`${msg}`)))(`${type}:  ${message}`);
-    //   return true;
-    // },
-    // Worker からの window/logMessage を受け取って console に流す
+    // Worker からの worker/log を受け取って console に流す
     'worker/log': (client, { type, message }) => {
       const logType = LOG_LEVEL_MAP[type] ?? 'log';
-      console[logType](`${logType} : ${message}`);
+      console[logType](`${LOG_ICON_MAP[type]} : ${message}`);
       return true;
     },
-
-    // Worker からの window/logMessage を受け取って console に流す
-    // 'window/logMessage': (client, params) => {
-    //   if (params.type === 1) console.error(`${params.type}:${params.message}`);
-    //   else if (params.type === 2) console.warn(`${params.type}:${params.message}`);
-    //   else console.log(`${params.type}:${params.message}`);
-    //   return true; // デフォルトのハンドラを上書きする
-    // },
   },
 }).connect(transport);
 
@@ -278,13 +265,13 @@ const initializeSetup = [
   EditorView.lineWrapping, // 改行
   tabSize.of(EditorState.tabSize.of(2)),
   javascriptLanguage,
-  
+
   //initTheme,
   transparentTheme,
   //resOutlineTheme,
   //bgRectangleTheme,
   //updateCallback,
-  
+
   client.plugin('file:///main.js'),
   oneDark, // 最後に設定
 ];
