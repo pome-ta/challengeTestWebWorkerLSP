@@ -13,7 +13,8 @@ export default class BrowserLanguageServer {
 
   #requestHandlers = {
     initialize: (params) => this.#initialize(params),
-    'textDocument/completion': (params) => this.#providers.completion.handle(params),
+    'textDocument/completion': (params) =>
+      this.#providers.completion.handle(params),
     'textDocument/hover': (params) => this.#providers.hover.handle(params),
   };
 

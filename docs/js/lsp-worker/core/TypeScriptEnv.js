@@ -35,7 +35,12 @@ export class TypeScriptEnv {
 
     this.#fsMap = await this.#createDefaultMapWithRetry();
     this.#system = tsvfs.createSystem(this.#fsMap);
-    this.#env = tsvfs.createVirtualTypeScriptEnvironment(this.#system, [], ts, this.#compilerOptions);
+    this.#env = tsvfs.createVirtualTypeScriptEnvironment(
+      this.#system,
+      [],
+      ts,
+      this.#compilerOptions,
+    );
 
     this.#setupATA();
     this.#ata(`import 'p5';`);
@@ -80,7 +85,9 @@ export class TypeScriptEnv {
   }
 
   updateFile(uri, text) {
-    this.#env.getSourceFile(uri) ? this.#env.updateFile(uri, text) : this.#env.createFile(uri, text);
+    this.#env.getSourceFile(uri)
+      ? this.#env.updateFile(uri, text)
+      : this.#env.createFile(uri, text);
   }
 
   deleteFile(uri) {
@@ -137,8 +144,15 @@ export class TypeScriptEnv {
       postLog(`VFS lib fetch attempt ${attempt}/${retryCount}`);
       try {
         const result = await Promise.race([
-          tsvfs.createDefaultMapFromCDN(this.#compilerOptions, ts.version, false, ts),
-          new Promise((_, r) => setTimeout(() => r(new Error('timeout')), perAttemptTimeoutMs)),
+          tsvfs.createDefaultMapFromCDN(
+            this.#compilerOptions,
+            ts.version,
+            false,
+            ts,
+          ),
+          new Promise((_, r) =>
+            setTimeout(() => r(new Error('timeout')), perAttemptTimeoutMs),
+          ),
         ]);
         postLog(`VFS lib fetch success size=${result.size}`);
         return result;
