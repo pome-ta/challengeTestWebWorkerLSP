@@ -38,6 +38,7 @@ export class TypeScriptEnv {
     this.#env = tsvfs.createVirtualTypeScriptEnvironment(this.#system, [], ts, this.#compilerOptions);
 
     this.#setupATA();
+    this.#ata(`import 'p5';`);
     // note: 環境固有の固定モジュールを初期注入する
     // this.#injectInternalModules();
     postLog('TypeScriptEnv init complete');
