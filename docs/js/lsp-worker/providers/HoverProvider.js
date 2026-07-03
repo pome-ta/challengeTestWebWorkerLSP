@@ -1,4 +1,3 @@
-import ts from 'https://esm.sh/typescript';
 import { postLog } from '../logger.js';
 
 export class HoverProvider {
@@ -11,31 +10,19 @@ export class HoverProvider {
     const { uri } = params.textDocument;
     const { position } = params;
 
-    const sourceFile = this.#tsEnv.getSourceFile(uri);
-    if (!sourceFile) {
-      return null;
-    }
-
-    const offset = ts.getPositionOfLineAndCharacter(sourceFile, position.line, position.character);
-
     try {
-      const info = this.#tsEnv.getLanguageService().getQuickInfoAtPosition(uri, offset);
+      // TSに依存せず、必要な情報を Facade(Env) からもらうだけ
+      const info = this.#tsEnv.getHoverInfo(uri, position);
       if (!info) {
         return null;
       }
 
-      const displayString = ts.displayPartsToString(info.displayParts || []);
-      const docString = ts.displayPartsToString(info.documentation || []);
-
       const contents = {
         kind: 'markdown',
-        value: [`\`\`\`typescript\n${displayString}\n\`\`\``, docString].filter(Boolean).join('\n\n---\n\n'),
+        value: [`\`\`\`typescript\n${info.displayString}\n\`\`\``, info.docString].filter(Boolean).join('\n\n---\n\n'),
       };
 
-      const start = ts.getLineAndCharacterOfPosition(sourceFile, info.textSpan.start);
-      const end = ts.getLineAndCharacterOfPosition(sourceFile, info.textSpan.start + info.textSpan.length);
-
-      return { contents, range: { start, end } };
+      return { contents, range: info.range };
     } catch (e) {
       postLog(`Hover error: ${e.message}`, 1);
       return null;

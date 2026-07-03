@@ -1,4 +1,5 @@
 import { TypeScriptEnv } from './core/TypeScriptEnv.js';
+import { DocumentManager } from './core/DocumentManager.js';
 import { HoverProvider } from './providers/HoverProvider.js';
 import { CompletionProvider } from './providers/CompletionProvider.js';
 import { DiagnosticProvider } from './providers/DiagnosticProvider.js';
@@ -7,14 +8,13 @@ import { JsonRpcErrorCode } from './protocol/JsonRpcErrorCode.js';
 
 export default class BrowserLanguageServer {
   #tsEnv;
+  #docManager;
   #providers = {};
-  #activeUris = new Set();
   #ready = false;
 
   #requestHandlers = {
     initialize: (params) => this.#initialize(params),
-    'textDocument/completion': (params) =>
-      this.#providers.completion.handle(params),
+    'textDocument/completion': (params) => this.#providers.completion.handle(params),
     'textDocument/hover': (params) => this.#providers.hover.handle(params),
   };
 
@@ -27,6 +27,7 @@ export default class BrowserLanguageServer {
 
   constructor() {
     this.#tsEnv = new TypeScriptEnv();
+    this.#docManager = new DocumentManager(this.#tsEnv);
   }
 
   async handleMessage(message) {
@@ -79,8 +80,9 @@ export default class BrowserLanguageServer {
   // =========================================================================
   async #initialize() {
     await this.#tsEnv.init(() => {
-      for (const uri of this.#activeUris) {
-        this.#providers.diagnostic.runDiagnostics(uri);
+      // ATA完了時: DocumentManagerから現在開いているファイル一覧をもらって診断を再実行
+      for (const uri of this.#docManager.activeUris) {
+        this.#providers.diagnostic.triggerDiagnostics(uri);
       }
     });
 
@@ -88,33 +90,8 @@ export default class BrowserLanguageServer {
     this.#providers.completion = new CompletionProvider(this.#tsEnv);
     this.#providers.diagnostic = new DiagnosticProvider(this.#tsEnv);
 
-    // パターンB：メインスレッド（エディタ側）の事情によって「動的に変わるモジュール」の場合
-    // note: アプリケーション層の判断として、必要な独自モジュールをVFSに作成する
-    // `import {hogehoge} from './src/utils/math.js';`
-    //     this.#tsEnv.createFile(
-    //       'file:///src/utils/math.js',
-    //       `
-    // /**
-    //  * 2つの数値を加算します。
-    //  * * @param {number} a - 1つ目の数値
-    //  * @param {number} b - 2つ目の数値
-    //  * @returns {number} a と b の合計値
-    //  */
-    // export function add(a, b) {
-    //   return a + b;
-    // }
-
-    // /**
-    //  * hogehoge処理（2つの数値を加算します）。
-    //  * * @param {number} a - 1つ目の引数
-    //  * @param {number} b - 2つ目の引数
-    //  * @returns {number} 計算結果
-    //  */
-    // export function hogehoge(a, b) {
-    //   return a + b;
-    // }
-    //       `,
-    //     );
+    // パターンBの場合：ここで this.#tsEnv.createVirtualFile(...) を呼んで、
+    // メインスレッドからの要求に応じた動的なモジュール注入も可能です。
 
     this.#ready = true;
 
@@ -132,30 +109,27 @@ export default class BrowserLanguageServer {
 
   #handleDidOpen(params) {
     const { uri, text } = params.textDocument;
-    this.#activeUris.add(uri);
 
-    const initialText = text.trim() === '' ? '\n' : text;
-    this.#tsEnv.createFile(uri, initialText);
-    postLog(`Opened file: ${uri}`);
+    // 状態管理とVFSへの反映は DocumentManager へ委譲
+    this.#docManager.openDocument(uri, text);
 
     this.#providers.diagnostic.triggerDiagnostics(uri);
-    this.#tsEnv.triggerATA(initialText);
+    this.#tsEnv.triggerATA(text);
   }
 
   #handleDidChange(params) {
     const { uri } = params.textDocument;
-    const validText = params.contentChanges[0].text || '\n';
+    const text = params.contentChanges[0].text || '\n';
 
-    this.#tsEnv.updateFile(uri, validText);
+    this.#docManager.updateDocument(uri, text);
 
     this.#providers.diagnostic.triggerDiagnostics(uri);
-    this.#tsEnv.triggerATA(validText);
+    this.#tsEnv.triggerATA(text);
   }
 
   #handleDidClose(params) {
     const { uri } = params.textDocument;
-    this.#activeUris.delete(uri);
-    this.#tsEnv.deleteFile(uri);
-    postLog(`Closed file: ${uri}`);
+
+    this.#docManager.closeDocument(uri);
   }
 }

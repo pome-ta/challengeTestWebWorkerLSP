@@ -35,78 +35,126 @@ export class TypeScriptEnv {
 
     this.#fsMap = await this.#createDefaultMapWithRetry();
     this.#system = tsvfs.createSystem(this.#fsMap);
-    this.#env = tsvfs.createVirtualTypeScriptEnvironment(
-      this.#system,
-      [],
-      ts,
-      this.#compilerOptions,
-    );
+    this.#env = tsvfs.createVirtualTypeScriptEnvironment(this.#system, [], ts, this.#compilerOptions);
 
     this.#setupATA();
     this.#ata(`import 'p5';`);
-    // note: 環境固有の固定モジュールを初期注入する
     // this.#injectInternalModules();
+
     postLog('TypeScriptEnv init complete');
   }
 
-  // パターンA：その環境に「常に最初から存在してほしい固定のモジュール」の場合
-  //   #injectInternalModules() {
-  //     this.createFile(
-  //       'file:///src/utils/math.js',
-  //       `
-  // /**
-  //  * 2つの数値を加算します。
-  //  * * @param {number} a - 1つ目の数値
-  //  * @param {number} b - 2つ目の数値
-  //  * @returns {number} a と b の合計値
-  //  */
-  // export function add(a, b) {
-  //   return a + b;
-  // }
+  // =========================================================
+  // Phase 2: Document と VirtualFile の分離
+  // =========================================================
 
-  // /**
-  //  * hogehoge処理（2つの数値を加算します）。
-  //  * * @param {number} a - 1つ目の引数
-  //  * @param {number} b - 2つ目の引数
-  //  * @returns {number} 計算結果
-  //  */
-  // export function hogehoge(a, b) {
-  //   return a + b;
-  // }
-  //       `,
-  //     );
-  //     postLog('[Env Init] Injected internal module: math.js', 4);
-  //   }
-
-  // --- File System API ---
-  createFile(uri, text) {
-    // if (!this.#env.getSourceFile(uri)) this.#env.createFile(uri, text);
-    !this.#env.getSourceFile(uri) ? this.#env.createFile(uri, text) : null;
+  updateDocument(uri, text) {
+    const validText = text.trim() === '' ? '\n' : text;
+    if (this.#env.getSourceFile(uri)) {
+      this.#env.updateFile(uri, validText);
+    } else {
+      this.#env.createFile(uri, validText);
+    }
   }
 
-  updateFile(uri, text) {
-    this.#env.getSourceFile(uri)
-      ? this.#env.updateFile(uri, text)
-      : this.#env.createFile(uri, text);
+  closeDocument(uri) {
+    if (this.#env.getSourceFile(uri)) {
+      this.#env.deleteFile(uri);
+    }
   }
 
-  deleteFile(uri) {
-    // if (this.#env.getSourceFile(uri)) this.#env.deleteFile(uri);
-    this.#env.getSourceFile(uri) ? this.#env.deleteFile(uri) : null;
+  createVirtualFile(uri, text) {
+    if (!this.#env.getSourceFile(uri)) {
+      this.#env.createFile(uri, text);
+    }
   }
 
-  getSourceFile(uri) {
-    return this.#env.getSourceFile(uri);
+  updateVirtualFile(uri, text) {
+    if (this.#env.getSourceFile(uri)) {
+      this.#env.updateFile(uri, text);
+    } else {
+      this.#env.createFile(uri, text);
+    }
   }
 
-  getLanguageService() {
-    return this.#env.languageService;
+  // =========================================================
+  // Phase 1 & 3: LanguageService の隠蔽と API の公開
+  // =========================================================
+
+  #getOffset(uri, position) {
+    const sourceFile = this.#env.getSourceFile(uri);
+    if (!sourceFile) {
+      return null;
+    }
+    return ts.getPositionOfLineAndCharacter(sourceFile, position.line, position.character);
   }
 
-  // --- ATA API ---
+  #getPosition(uri, offset) {
+    const sourceFile = this.#env.getSourceFile(uri);
+    if (!sourceFile) {
+      return null;
+    }
+    return ts.getLineAndCharacterOfPosition(sourceFile, offset);
+  }
+
+  getHoverInfo(uri, position) {
+    const offset = this.#getOffset(uri, position);
+    if (offset === null) {
+      return null;
+    }
+
+    const info = this.#env.languageService.getQuickInfoAtPosition(uri, offset);
+    if (!info) {
+      return null;
+    }
+
+    return {
+      displayString: ts.displayPartsToString(info.displayParts || []),
+      docString: ts.displayPartsToString(info.documentation || []),
+      range: {
+        start: this.#getPosition(uri, info.textSpan.start),
+        end: this.#getPosition(uri, info.textSpan.start + info.textSpan.length),
+      },
+    };
+  }
+
+  getCompletions(uri, position) {
+    const offset = this.#getOffset(uri, position);
+    if (offset === null) {
+      return null;
+    }
+
+    return this.#env.languageService.getCompletionsAtPosition(uri, offset, {
+      includeCompletionsForModuleExports: false,
+      includeCompletionsWithInsertText: true,
+    });
+  }
+
+  getDiagnostics(uri) {
+    const syntactic = this.#env.languageService.getSyntacticDiagnostics(uri);
+    const semantic = this.#env.languageService.getSemanticDiagnostics(uri);
+
+    return [...syntactic, ...semantic].map((diag) => {
+      const startOffset = diag.start ?? 0;
+      const endOffset = startOffset + (diag.length ?? 0);
+      return {
+        range: {
+          start: this.#getPosition(uri, startOffset),
+          end: this.#getPosition(uri, endOffset),
+        },
+        category: diag.category,
+        message: ts.flattenDiagnosticMessageText(diag.messageText, '\n'),
+        code: diag.code,
+      };
+    });
+  }
+
+  // =========================================================
+  // ATA と 内部モジュール API
+  // =========================================================
+
   triggerATA(text) {
-    // if (this.#ataTimer) clearTimeout(this.#ataTimer);
-    this.#ataTimer ? clearTimeout(this.#ataTimer) : null;
+    if (this.#ataTimer) clearTimeout(this.#ataTimer);
     this.#ataTimer = setTimeout(() => {
       postLog('Triggering ATA parsing...', 4);
       this.#ata(text);
@@ -127,16 +175,26 @@ export class TypeScriptEnv {
         receivedFile: (code, path) => {
           const vfsPath = `file://${path}`;
           postLog(`[ATA] Injected: ${path}`, 4);
-          this.updateFile(vfsPath, code);
+          this.updateVirtualFile(vfsPath, code); // VirtualFileとして更新
         },
         finished: () => {
           postLog(`[ATA] Finished downloading types.`, 3);
-          //   if (this.#onAtaFinished) this.#onAtaFinished();
-          this.#onAtaFinished ? this.#onAtaFinished() : null;
+          if (this.#onAtaFinished) this.#onAtaFinished();
         },
       },
     });
   }
+
+  //   #injectInternalModules() {
+  //     this.createVirtualFile(
+  //       'file:///src/utils/math.ts',
+  //       `
+  // export function add(a: number, b: number) { return a + b; }
+  // export function hogehoge(a: number, b: number) { return a + b; }
+  //       `,
+  //     );
+  //     postLog('[Env Init] Injected internal module: math.ts', 4);
+  //   }
 
   async #createDefaultMapWithRetry(retryCount = 3, perAttemptTimeoutMs = 8000) {
     let lastError = null;
@@ -144,22 +202,17 @@ export class TypeScriptEnv {
       postLog(`VFS lib fetch attempt ${attempt}/${retryCount}`);
       try {
         const result = await Promise.race([
-          tsvfs.createDefaultMapFromCDN(
-            this.#compilerOptions,
-            ts.version,
-            false,
-            ts,
-          ),
-          new Promise((_, r) =>
-            setTimeout(() => r(new Error('timeout')), perAttemptTimeoutMs),
-          ),
+          tsvfs.createDefaultMapFromCDN(this.#compilerOptions, ts.version, false, ts),
+          new Promise((_, r) => setTimeout(() => r(new Error('timeout')), perAttemptTimeoutMs)),
         ]);
         postLog(`VFS lib fetch success size=${result.size}`);
         return result;
       } catch (err) {
         lastError = err;
         const msg = String(err?.message ?? err);
-        if (msg.includes('NetworkError')) throw err;
+        if (msg.includes('NetworkError')) {
+          throw err;
+        }
         if (msg.includes('timeout')) {
           await sleep(1000 * attempt);
           continue;
