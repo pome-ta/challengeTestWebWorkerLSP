@@ -266,14 +266,14 @@ const initializeSetup = [
   tabSize.of(EditorState.tabSize.of(2)),
   javascriptLanguage,
 
-  //initTheme,
+  initTheme,
   transparentTheme,
-  //resOutlineTheme,
-  //bgRectangleTheme,
+  resOutlineTheme,
+  bgRectangleTheme,
   //updateCallback,
 
   client.plugin('file:///main.js'),
-  oneDark, // 最後に設定
+  //oneDark, // 最後に設定
 ];
 
 /* --- editor(View) */
