@@ -22,69 +22,55 @@ import { createWorkerTransport } from './workerTransport.js';
 import DomFactory from './utils/domFactory.js';
 
 /**
- * backGround Rectangle span
+ * Code Background Block span
  */
-const bgRectangleClassName = 'cm-bgRectangle';
-const bgRectangleMark = Decoration.mark({ class: bgRectangleClassName });
-const bgRectangleTheme = EditorView.baseTheme({
-  '.cm-bgRectangle': { backgroundColor: '#121212bb' },
+const codeBgBlockClassName = 'cm-code-background-block';
+const codeBgBlockMark = Decoration.mark({
+  class: codeBgBlockClassName,
 });
-const bgRectEffect = {
-  add: StateEffect.define({ from: 0, to: 0 }),
-  remove: StateEffect.define({ from: 0, to: 0 }),
-};
-
-const bgRectangleField = StateField.define({
-  create() {
-    return Decoration.none;
-  },
-  update(bgRectangles, tr) {
-    bgRectangles = bgRectangles.map(tr.changes);
-    for (const ef of tr.effects) {
-      if (ef.is(bgRectEffect.add)) {
-        bgRectangles = bgRectangles.update({
-          add: [bgRectangleMark.range(ef.value.from, ef.value.to)],
-        });
-      } else if (ef.is(bgRectEffect.remove)) {
-        bgRectangles = bgRectangles.update({
-          filter: (f, t, value) => !(value.class === bgRectangleClassName),
-        });
-      }
-    }
-    return bgRectangles;
-  },
-  provide: (f) => EditorView.decorations.from(f),
+const codeBackgroundBlockTheme = EditorView.baseTheme({
+  [`.${codeBgBlockClassName}`]: { backgroundColor: '#121212bb' },
 });
 
-function bgRectangleSet(view) {
-  const { state, dispatch } = view;
-  const { from, to } = state.selection.main.extend(0, state.doc.length);
-  if (!from && !to) {
-    return;
-  }
-  const decoSet = state.field(bgRectangleField, false);
-
-  const addFromTO = (from, to) => bgRectEffect.add.of({ from, to });
-  const removeFromTO = (from, to) => bgRectEffect.remove.of({ from, to });
-
-  let effects = [];
-  effects.push(!decoSet ? StateEffect.appendConfig.of([bgRectangleField]) : null);
-  decoSet?.between(from, to, (decoFrom, decoTo) => {
-    if (from === decoTo || to === decoFrom) {
-      return;
+function buildCodeBgDecorations(view) {
+  const builder = new RangeSetBuilder();
+  for (const { from, to } of view.visibleRanges) {
+    for (let pos = from; pos <= to; ) {
+      const line = view.state.doc.lineAt(pos);
+      line.length ? builder.add(line.from, line.to, codeBgBlockMark) : null;
+      pos = line.to + 1;
     }
-    effects.push(removeFromTO(from, to));
-    effects.push(removeFromTO(decoFrom, decoTo));
-    effects.push(decoFrom < from ? addFromTO(decoFrom, from) : null);
-    effects.push(decoTo > to ? addFromTO(to, decoTo) : null);
-  });
-  effects.push(addFromTO(from, to));
-  if (!effects.length) {
-    return false;
   }
-  dispatch({ effects: effects.filter((ef) => ef) });
-  return true;
+  return builder.finish();
 }
+
+const codeBackgroundBlockPlugin = ViewPlugin.fromClass(
+  class {
+    decorations;
+    constructor(view) {
+      this.decorations = buildCodeBgDecorations(view);
+    }
+    update(update) {
+      if (!update.docChanged && !update.viewportChanged) {
+        return;
+      }
+      this.decorations = buildCodeBgDecorations(update.view);
+    }
+  },
+  {
+    decorations: (plugin) => plugin.decorations,
+  },
+);
+
+// todo: 今後の外出し用として`export`
+export const codeBackgroundBlock = () => [codeBackgroundBlockPlugin, codeBackgroundBlockTheme];
+
+// note: 配列渡しであれば、そのまま記載
+//       関数渡しだと`codeBackgroundBlock()` と記載
+// export const codeBackgroundBlock = [
+//   codeBackgroundBlockPlugin,
+//   codeBackgroundBlockTheme,
+// ];
 
 const resOutlineTheme = EditorView.baseTheme({
   '&.cm-editor': {
@@ -269,8 +255,7 @@ const initializeSetup = [
   initTheme,
   transparentTheme,
   resOutlineTheme,
-  bgRectangleTheme,
-  //updateCallback,
+  codeBackgroundBlock(),
 
   client.plugin('file:///main.js'),
   //oneDark, // 最後に設定
