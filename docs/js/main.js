@@ -1,5 +1,5 @@
 import { minimalSetup, basicSetup } from 'codemirror';
-import { Compartment, EditorState, StateEffect, StateField } from '@codemirror/state';
+import { Compartment, EditorState, StateEffect, StateField, RangeSetBuilder } from '@codemirror/state';
 import {
   Decoration,
   EditorView,
@@ -7,6 +7,7 @@ import {
   highlightActiveLineGutter,
   highlightWhitespace,
   lineNumbers,
+  ViewPlugin,
 } from '@codemirror/view';
 
 import { autocompletion, closeBrackets } from '@codemirror/autocomplete';
