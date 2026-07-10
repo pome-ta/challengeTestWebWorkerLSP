@@ -1,5 +1,5 @@
 import { getCompletionItemKind } from '../mappers/completionKind.js';
-import { postLog } from '../logger.js';
+import { postLog } from '../../logger.js';
 
 export class CompletionProvider {
   #tsEnv;

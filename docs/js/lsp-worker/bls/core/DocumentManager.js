@@ -1,4 +1,4 @@
-import { postLog } from '../logger.js';
+import { postLog } from '../../logger.js';
 
 export class DocumentManager {
   #tsEnv;

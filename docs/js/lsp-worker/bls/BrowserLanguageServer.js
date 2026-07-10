@@ -3,8 +3,9 @@ import { DocumentManager } from './core/DocumentManager.js';
 import { HoverProvider } from './providers/HoverProvider.js';
 import { CompletionProvider } from './providers/CompletionProvider.js';
 import { DiagnosticProvider } from './providers/DiagnosticProvider.js';
-import { postLog } from './logger.js';
 import { JsonRpcErrorCode } from './protocol/JsonRpcErrorCode.js';
+
+import { postLog, setDebug } from '../logger.js';
 
 export default class BrowserLanguageServer {
   #tsEnv;
@@ -23,6 +24,7 @@ export default class BrowserLanguageServer {
     'textDocument/didOpen': (params) => this.#handleDidOpen(params),
     'textDocument/didChange': (params) => this.#handleDidChange(params),
     'textDocument/didClose': (params) => this.#handleDidClose(params),
+    '$/setDebugMode': (params) => setDebug(params.enabled),
   };
 
   constructor() {

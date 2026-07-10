@@ -1,5 +1,5 @@
 import { getDiagnosticSeverity } from '../mappers/diagnosticSeverity.js';
-import { postLog } from '../logger.js';
+import { postLog } from '../../logger.js';
 
 export class DiagnosticProvider {
   #tsEnv;

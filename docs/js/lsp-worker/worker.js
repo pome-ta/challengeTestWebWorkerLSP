@@ -1,4 +1,4 @@
-import BrowserLanguageServer from './BrowserLanguageServer.js';
+import BrowserLanguageServer from './bls/BrowserLanguageServer.js';
 
 // ---------------------------------------------------------------------------
 // Worker Event Listener
