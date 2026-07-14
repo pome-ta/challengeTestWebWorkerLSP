@@ -39,6 +39,16 @@ export class TypeScriptEnv {
     this.#env = tsvfs.createVirtualTypeScriptEnvironment(this.#system, [], ts, this.#compilerOptions);
 
     this.#setupATA();
+
+    const p5GlobalBridge = `
+      import p5_module from 'p5';
+      declare global {
+        const p5: typeof p5_module;
+        type p5 = p5_module;
+      }
+    `;
+    this.createVirtualFile('file:///p5-bridge.d.ts', p5GlobalBridge);
+
     this.#ata(`import 'p5';`);
     // this.#injectInternalModules();
 
