@@ -39,6 +39,12 @@ export class TypeScriptEnv {
     this.#env = tsvfs.createVirtualTypeScriptEnvironment(this.#system, [], ts, this.#compilerOptions);
 
     this.#setupATA();
+    
+    const p5SoundDts = await fetch('./../../types/p5.sound.d.ts').then((r) => r.text());
+    
+    //postLog(p5SoundDts)
+
+
 
     const p5GlobalBridge = `
       import p5_module from 'p5';
