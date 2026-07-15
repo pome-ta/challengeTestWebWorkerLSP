@@ -38,6 +38,31 @@ export class TypeScriptEnv {
     this.#system = tsvfs.createSystem(this.#fsMap);
     this.#env = tsvfs.createVirtualTypeScriptEnvironment(this.#system, [], ts, this.#compilerOptions);
 
+    const files = [
+      'package.json',
+      'types/index.d.ts',
+      'types/globals.d.ts',
+      'types/core.d.ts',
+      'types/sources.d.ts',
+      'types/effects.d.ts',
+      'types/analysis.d.ts',
+      'types/deprecated.d.ts',
+    ];
+
+    const baseURL = new URL('../../types/p5.sound/', import.meta.url);
+
+    const results = await Promise.all(
+      files.map(async (file) => ({
+        path: `file:///node_modules/p5.sound/${file}`,
+        text: await fetch(new URL(file, baseURL)).then((r) => r.text()),
+      })),
+    );
+
+
+
+
+    /*
+
     const soundPackage = 'p5.sound/package.json';
     const soundPackageURL = new URL(`../../types/${soundPackage}`, import.meta.url);
     const soundPackageStr = await fetch(soundPackageURL).then((r) => r.text());
@@ -45,27 +70,32 @@ export class TypeScriptEnv {
     const soundDotTs = 'p5.sound/types/p5.sound.d.ts';
     const soundDotTsURL = new URL(`../../types/${soundDotTs}`, import.meta.url);
     const soundDotTsStr = await fetch(soundDotTsURL).then((r) => r.text());
-    
+
     this.createVirtualFile(`file:///node_modules/${soundPackage}`, soundPackageStr);
     this.createVirtualFile(`file:///node_modules/${soundDotTs}`, soundDotTsStr);
     //this.createVirtualFile(`file:///types/${soundPackage}`, soundPackageStr);
     //this.createVirtualFile(`file:///types/${soundDotTs}`, soundDotTsStr);
-
+    */
 
     const p5GlobalBridge = `
       import p5_module from 'p5';
+      import 'p5.sound';
 
       declare global {
         const p5: typeof p5_module;
         type p5 = p5_module;
       }
     `;
-    //this.createVirtualFile('file:///p5-bridge.d.ts', p5GlobalBridge);
-    this.createVirtualFile('file:///types/p5-bridge.d.ts', p5GlobalBridge);
-
+    this.createVirtualFile('file:///p5-bridge.d.ts', p5GlobalBridge);
+    //this.createVirtualFile('file:///types/p5-bridge.d.ts', p5GlobalBridge);
 
     this.#setupATA();
     this.#ata(`import 'p5';`);
+    
+    for (const { path, text } of results) {
+      this.createVirtualFile(path, text);
+    }
+
 
     postLog('TypeScriptEnv init complete');
   }
