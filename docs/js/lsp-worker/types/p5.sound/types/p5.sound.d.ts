@@ -9,6 +9,8 @@
 
 import p5 from 'p5';
 
+declare const __P5_SOUND_TEST__: 123;
+
 declare module 'p5' {
   interface p5 {
     /**
