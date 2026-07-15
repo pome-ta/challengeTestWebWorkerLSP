@@ -38,10 +38,6 @@ export class TypeScriptEnv {
     this.#system = tsvfs.createSystem(this.#fsMap);
     this.#env = tsvfs.createVirtualTypeScriptEnvironment(this.#system, [], ts, this.#compilerOptions);
 
-
-
-
-
     const p5GlobalBridge = `
       import p5_module from 'p5';
       declare global {
@@ -50,15 +46,14 @@ export class TypeScriptEnv {
       }
     `;
     this.createVirtualFile('file:///p5-bridge.d.ts', p5GlobalBridge);
-    
+
     const p5SoundURL = new URL('../../types/p5.sound.d.ts', import.meta.url);
     const p5SoundDts = await fetch(p5SoundURL).then((r) => r.text());
 
     this.createVirtualFile('file:///p5.sound.d.ts', p5SoundDts);
 
     postLog(p5SoundDts);
-    
-    
+
     this.#setupATA();
     this.#ata(`import 'p5';`);
     // this.#injectInternalModules();
@@ -176,7 +171,9 @@ export class TypeScriptEnv {
   // =========================================================
 
   triggerATA(text) {
-    if (this.#ataTimer) clearTimeout(this.#ataTimer);
+    if (this.#ataTimer) {
+      clearTimeout(this.#ataTimer);
+    }
     this.#ataTimer = setTimeout(() => {
       postLog('Triggering ATA parsing...', 4);
       this.#ata(text);
