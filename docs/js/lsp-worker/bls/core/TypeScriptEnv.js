@@ -38,11 +38,7 @@ export class TypeScriptEnv {
     this.#system = tsvfs.createSystem(this.#fsMap);
     this.#env = tsvfs.createVirtualTypeScriptEnvironment(this.#system, [], ts, this.#compilerOptions);
 
-    this.#setupATA();
-    
-    const p5SoundDts = await fetch('./../../types/p5.sound.d.ts').then((r) => r.text());
-    
-    //postLog(p5SoundDts)
+
 
 
 
@@ -54,7 +50,16 @@ export class TypeScriptEnv {
       }
     `;
     this.createVirtualFile('file:///p5-bridge.d.ts', p5GlobalBridge);
+    
+    const p5SoundURL = new URL('../../types/p5.sound.d.ts', import.meta.url);
+    const p5SoundDts = await fetch(p5SoundURL).then((r) => r.text());
 
+    this.createVirtualFile('file:///p5.sound.d.ts', p5SoundDts);
+
+    postLog(p5SoundDts);
+    
+    
+    this.#setupATA();
     this.#ata(`import 'p5';`);
     // this.#injectInternalModules();
 
