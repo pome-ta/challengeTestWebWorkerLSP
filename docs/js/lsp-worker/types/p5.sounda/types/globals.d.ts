@@ -5,7 +5,7 @@
  * provided by the p5.sound addon.
  */
 
-import p5 from 'p5';
+//import p5 from 'p5';
 
 declare module 'p5' {
   interface p5 {

@@ -41,24 +41,29 @@ export class TypeScriptEnv {
     const files = [
       'package.json',
       'types/index.d.ts',
+      /*
       'types/globals.d.ts',
       'types/core.d.ts',
       'types/sources.d.ts',
       'types/effects.d.ts',
       'types/analysis.d.ts',
       'types/deprecated.d.ts',
+      */
     ];
 
-    const baseURL = new URL('../../types/p5.sound/', import.meta.url);
+    const baseURL = new URL('../../types/p5.sounda/', import.meta.url);
 
     const results = await Promise.all(
       files.map(async (file) => ({
-        path: `file:///node_modules/p5.sound/${file}`,
+        path: `file:///types/p5.sound/${file}`,
         text: await fetch(new URL(file, baseURL)).then((r) => r.text()),
       })),
     );
 
 
+    for (const { path, text } of results) {
+      this.createVirtualFile(path, text);
+    }
 
 
     /*
@@ -86,15 +91,12 @@ export class TypeScriptEnv {
         type p5 = p5_module;
       }
     `;
-    this.createVirtualFile('file:///p5-bridge.d.ts', p5GlobalBridge);
-    //this.createVirtualFile('file:///types/p5-bridge.d.ts', p5GlobalBridge);
+    //this.createVirtualFile('file:///p5-bridge.d.ts', p5GlobalBridge);
+    this.createVirtualFile('file:///types/p5-bridge.d.ts', p5GlobalBridge);
 
     this.#setupATA();
     this.#ata(`import 'p5';`);
     
-    for (const { path, text } of results) {
-      this.createVirtualFile(path, text);
-    }
 
 
     postLog('TypeScriptEnv init complete');

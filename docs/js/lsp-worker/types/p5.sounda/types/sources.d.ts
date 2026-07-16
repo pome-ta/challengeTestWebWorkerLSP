@@ -5,7 +5,7 @@
  * Depends on: core.d.ts
  */
 
-import p5 from 'p5';
+//import p5 from 'p5';
 
 declare namespace p5 {
   // -------------------------------------------------------------------------
