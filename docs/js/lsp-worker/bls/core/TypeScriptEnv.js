@@ -60,11 +60,9 @@ export class TypeScriptEnv {
       })),
     );
 
-
     for (const { path, text } of results) {
       this.createVirtualFile(path, text);
     }
-
 
     /*
 
@@ -84,7 +82,6 @@ export class TypeScriptEnv {
 
     const p5GlobalBridge = `
       import p5_module from 'p5';
-      import 'p5.sound';
 
       declare global {
         const p5: typeof p5_module;
@@ -96,8 +93,6 @@ export class TypeScriptEnv {
 
     this.#setupATA();
     this.#ata(`import 'p5';`);
-    
-
 
     postLog('TypeScriptEnv init complete');
   }

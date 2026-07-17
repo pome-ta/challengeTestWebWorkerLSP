@@ -1,12 +1,5 @@
-declare module 'p5.sounda' {
-  export class AudioIn {
-    start(): void;
-    stop(): void;
-  }
+import p5 from 'p5';
 
-  export class FFT {
-    analyze(): number[];
-  }
+declare const __P5_TEST__: p5;
 
-  export const VERSION: string;
-}
+export {};
