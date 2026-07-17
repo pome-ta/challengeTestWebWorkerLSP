@@ -55,7 +55,7 @@ export class TypeScriptEnv {
 
     const results = await Promise.all(
       files.map(async (file) => ({
-        path: `file:///types/p5.sound/${file}`,
+        path: `file:///myTypes/p5.sounda/${file}`,
         text: await fetch(new URL(file, baseURL)).then((r) => r.text()),
       })),
     );
@@ -108,6 +108,31 @@ export class TypeScriptEnv {
     } else {
       this.#env.createFile(uri, validText);
     }
+
+    const program = this.#env.languageService.getProgram();
+    const sf = program.getSourceFile('file:///main.js');
+
+    postLog('👇getSourceFiles');
+    postLog(
+      program
+        .getSourceFiles()
+        .map((sf) => sf.fileName)
+        .join('\n'),
+    );
+
+    postLog(`😊resolvedModules: ${sf.resolvedModules}`);
+
+    /*
+const outdiv = document.createElement('div');
+const erudaShadow = document.getElementById('eruda').shadowRoot;
+const lunaConsoleLogContents = erudaShadow.querySelectorAll('.luna-console-log-content');
+lunaConsoleLogContents.forEach((content) => {
+  outdiv.appendChild(content);
+});
+const innerText = outdiv.innerText;
+const copyblock = '```' + '\n' + innerText + '\n' + '```';
+navigator.clipboard.writeText(copyblock).then();
+*/
   }
 
   closeDocument(uri) {

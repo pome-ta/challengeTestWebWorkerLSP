@@ -1,5 +1,7 @@
-import p5 from 'p5';
+import type P5 from 'p5';
 
-declare const __P5_TEST__: p5;
+declare global {
+  const __TEST__: P5;
+}
 
 export {};
