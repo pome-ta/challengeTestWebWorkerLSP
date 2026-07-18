@@ -89,7 +89,7 @@ export class TypeScriptEnv {
       }
     `;
     //this.createVirtualFile('file:///p5-bridge.d.ts', p5GlobalBridge);
-    this.createVirtualFile('file:///types/p5-bridge.d.ts', p5GlobalBridge);
+    //this.createVirtualFile('file:///types/p5-bridge.d.ts', p5GlobalBridge);
 
     this.#setupATA();
     this.#ata(`import 'p5';`);
@@ -112,6 +112,7 @@ export class TypeScriptEnv {
     const program = this.#env.languageService.getProgram();
     const sf = program.getSourceFile('file:///main.js');
 
+    
     postLog('👇getSourceFiles');
     postLog(
       program
@@ -119,8 +120,9 @@ export class TypeScriptEnv {
         .map((sf) => sf.fileName)
         .join('\n'),
     );
+    
 
-    postLog(`😊resolvedModules: ${sf.resolvedModules}`);
+    //postLog(`😊resolvedModules: ${sf.resolvedModules}`);
 
     /*
 const outdiv = document.createElement('div');
