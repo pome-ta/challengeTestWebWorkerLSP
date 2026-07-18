@@ -1,7 +1,9 @@
-import type P5 from 'p5';
+import 'p5';
 
-declare global {
-  const __TEST__: P5;
+declare module 'p5' {
+  interface p5 {
+    __TEST_METHOD__(): void;
+  }
 }
 
 export {};
