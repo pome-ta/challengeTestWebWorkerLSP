@@ -89,7 +89,7 @@ export class TypeScriptEnv {
       }
     `;
     //this.createVirtualFile('file:///p5-bridge.d.ts', p5GlobalBridge);
-    //this.createVirtualFile('file:///types/p5-bridge.d.ts', p5GlobalBridge);
+    this.createVirtualFile('file:///types/p5-bridge.d.ts', p5GlobalBridge);
 
     this.#setupATA();
     this.#ata(`import 'p5';`);
@@ -113,8 +113,15 @@ export class TypeScriptEnv {
     const sf = program.getSourceFile('file:///main.js');
 
     //const typesp5 = program.getSourceFile('file:///node_modules/p5/types/p5.d.ts');
-    postLog('👇typesp5');
-    postLog(program.getSourceFile('file:///node_modules/p5/types/p5.d.ts')?.text.slice(0, 3000));
+    //postLog('👇typesp5');
+    //postLog(program.getSourceFile('file:///node_modules/p5/types/p5.d.ts')?.text.slice(0, 3000));
+    const checker = program.getTypeChecker();
+
+    //const sf = program.getSourceFile('file:///main.js');
+
+    const symbol = checker.resolveName('p5', sf, ts.SymbolFlags.Type, false);
+    //postLog('👇symbol');
+    //postLog(symbol?.escapedName);
 
     /*
     
