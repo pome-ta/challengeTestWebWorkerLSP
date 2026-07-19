@@ -36,7 +36,12 @@ export class TypeScriptEnv {
 
     this.#fsMap = await this.#createDefaultMapWithRetry();
     this.#system = tsvfs.createSystem(this.#fsMap);
-    this.#env = tsvfs.createVirtualTypeScriptEnvironment(this.#system, [], ts, this.#compilerOptions);
+    this.#env = tsvfs.createVirtualTypeScriptEnvironment(
+      this.#system,
+      [],
+      ts,
+      this.#compilerOptions,
+    );
 
     const files = [
       'package.json',
@@ -82,6 +87,7 @@ export class TypeScriptEnv {
 
     const p5GlobalBridge = `
       import p5_module from 'p5';
+      import 'p5.sounda';
 
       declare global {
         const p5: typeof p5_module;
@@ -123,16 +129,13 @@ export class TypeScriptEnv {
     //postLog('👇symbol');
     //postLog(symbol?.escapedName);
 
-    /*
-    
     postLog('👇getSourceFiles');
-    postLog(
+    console.log(
       program
         .getSourceFiles()
         .map((sf) => sf.fileName)
         .join('\n'),
     );
-    */
 
     //postLog(`😊resolvedModules: ${sf.resolvedModules}`);
 
@@ -178,7 +181,11 @@ navigator.clipboard.writeText(copyblock).then();
     if (!sourceFile) {
       return null;
     }
-    return ts.getPositionOfLineAndCharacter(sourceFile, position.line, position.character);
+    return ts.getPositionOfLineAndCharacter(
+      sourceFile,
+      position.line,
+      position.character,
+    );
   }
 
   #getPosition(uri, offset) {
@@ -296,8 +303,15 @@ navigator.clipboard.writeText(copyblock).then();
       postLog(`VFS lib fetch attempt ${attempt}/${retryCount}`);
       try {
         const result = await Promise.race([
-          tsvfs.createDefaultMapFromCDN(this.#compilerOptions, ts.version, false, ts),
-          new Promise((_, r) => setTimeout(() => r(new Error('timeout')), perAttemptTimeoutMs)),
+          tsvfs.createDefaultMapFromCDN(
+            this.#compilerOptions,
+            ts.version,
+            false,
+            ts,
+          ),
+          new Promise((_, r) =>
+            setTimeout(() => r(new Error('timeout')), perAttemptTimeoutMs),
+          ),
         ]);
         postLog(`VFS lib fetch success size=${result.size}`);
         return result;
