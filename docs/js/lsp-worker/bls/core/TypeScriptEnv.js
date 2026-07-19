@@ -112,6 +112,11 @@ export class TypeScriptEnv {
     const program = this.#env.languageService.getProgram();
     const sf = program.getSourceFile('file:///main.js');
 
+    //const typesp5 = program.getSourceFile('file:///node_modules/p5/types/p5.d.ts');
+    postLog('👇typesp5');
+    postLog(program.getSourceFile('file:///node_modules/p5/types/p5.d.ts')?.text.slice(0, 3000));
+
+    /*
     
     postLog('👇getSourceFiles');
     postLog(
@@ -120,7 +125,7 @@ export class TypeScriptEnv {
         .map((sf) => sf.fileName)
         .join('\n'),
     );
-    
+    */
 
     //postLog(`😊resolvedModules: ${sf.resolvedModules}`);
 
