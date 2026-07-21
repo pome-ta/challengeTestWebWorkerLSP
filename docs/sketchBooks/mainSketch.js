@@ -1,5 +1,3 @@
-//import 'p5.sound';
-
 /**
  * @param {p5} p
  */
@@ -20,13 +18,17 @@ const sketch = (p) => {
 
 new p5(sketch);
 
-// const v = 360;
 
-// function setup() {
-//   createCanvas(v, v);
-//   colorMode(HSL, v, 1, 1);
-// }
+/*
+const v = 360;
 
-// function draw() {
-//   background(frameCount % v, 1, 0.5);
-// }
+function setup() {
+  createCanvas(v, v);
+  colorMode(HSL, v, 1, 1);
+}
+
+function draw() {
+  background(frameCount % v, 1, 0.5);
+}
+*/
+

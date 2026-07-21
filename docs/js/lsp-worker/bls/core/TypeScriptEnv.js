@@ -82,15 +82,24 @@ export class TypeScriptEnv {
 
     const p5GlobalBridge = `
       import p5_module from 'p5';
-      import 'p5.sounda';
 
       declare global {
         const p5: typeof p5_module;
         type p5 = p5_module;
       }
+      
+      export {};
     `;
     //this.createVirtualFile('file:///p5-bridge.d.ts', p5GlobalBridge);
     this.createVirtualFile('file:///types/p5-bridge.d.ts', p5GlobalBridge);
+    
+    const p5SooundGlobalBridge = `
+      import 'p5.sounda';
+
+      export {};
+    `;
+
+    this.createVirtualFile('file:///types/p5.sound-bridge.d.ts', p5SooundGlobalBridge);
 
     this.#setupATA();
     this.#ata(`import 'p5';`);
@@ -125,7 +134,7 @@ export class TypeScriptEnv {
     //postLog(symbol?.escapedName);
 
     postLog('👇getSourceFiles');
-    console.log(
+    postLog(
       program
         .getSourceFiles()
         .map((sf) => sf.fileName)
