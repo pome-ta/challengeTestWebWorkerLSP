@@ -61,7 +61,7 @@ export class TypeScriptEnv {
     );
 
     for (const { path, text } of results) {
-      this.createVirtualFile(path, text);
+      //this.createVirtualFile(path, text);
     }
 
     /*
